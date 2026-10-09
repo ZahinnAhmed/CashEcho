@@ -102,12 +102,14 @@ const json = (data) => ({ method: "POST", body: JSON.stringify(data) });
 export const api = {
   load: async () => {
     if (DEMO) return demo.load();
-    const [t, d, wall] = await Promise.all([
+    const [t, d, wall, weekly] = await Promise.all([
       request("/transactions"),
       request("/debts"),
       request("/wall"),
+      request("/transactions/weekly"),
     ]);
     return {
+      weekly,
       transactions: Array.isArray(t) ? t : t.transactions,
       debts: Array.isArray(d) ? d : d.debts,
       wall,
@@ -168,6 +170,18 @@ export const api = {
   },
   googleLogin: async (credential) => {
     const result = await request("/auth/google", json({ credential }));
+    setToken(result.token);
+    setUser(result.user);
+    return result.user;
+  },
+  signup: async ({ name, email, password }) => {
+    const result = await request("/auth/signup", json({ name, email, password }));
+    setToken(result.token);
+    setUser(result.user);
+    return result.user;
+  },
+  login: async ({ email, password }) => {
+    const result = await request("/auth/login", json({ email, password }));
     setToken(result.token);
     setUser(result.user);
     return result.user;

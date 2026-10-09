@@ -126,6 +126,7 @@ async function main() {
     );
 
     await client.query('COMMIT');
+    await pool.query("CALL refresh_continuous_aggregate('daily_totals', NULL, NULL)");
     console.log(`Seeded 3 debts and 90 days of transactions for ${email}.`);
   } catch (err) {
     await client.query('ROLLBACK');

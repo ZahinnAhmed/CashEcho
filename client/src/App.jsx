@@ -340,6 +340,9 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(!DEMO && hasSession());
   const [user, setUser] = useState(!DEMO ? getUser() : null);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [signupForm, setSignupForm] = useState({ name: "", email: "", password: "" });
+  const [authMode, setAuthMode] = useState("login");
+  const [authBusy, setAuthBusy] = useState(false);
   const [tab, setTab] = useState("log"),
     [data, setData] = useState(null),
     [error, setError] = useState(""),
@@ -402,18 +405,47 @@ export default function App() {
     setTab("log");
     setIsLoggedIn(false);
   }
-  function handleLoginSubmit(event) {
-    event.preventDefault();
-    if (!DEMO) {
-      setError("Email sign-in isn't available yet. Please use Google below.");
+  // Signs in or signs up. In demo mode there is no server, so it just lets you in.
+  async function authenticate(call, fallbackName) {
+    setError("");
+    if (DEMO) {
+      setUser(fallbackName ? { name: fallbackName } : null);
+      setIsLoggedIn(true);
       return;
     }
+    setAuthBusy(true);
+    try {
+      setUser(await call());
+      setIsLoggedIn(true);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+  function handleLoginSubmit(event) {
+    event.preventDefault();
     if (!loginForm.email.trim() || !loginForm.password.trim()) {
       setError("Please enter both your email and password.");
       return;
     }
-    setError("");
-    setIsLoggedIn(true);
+    void authenticate(() => api.login(loginForm));
+  }
+  function handleSignupSubmit(event) {
+    event.preventDefault();
+    if (
+      !signupForm.name.trim() ||
+      !signupForm.email.trim() ||
+      !signupForm.password.trim()
+    ) {
+      setError("Please fill in your name, email, and password.");
+      return;
+    }
+    if (signupForm.password.length < 8) {
+      setError("Your password must be at least 8 characters.");
+      return;
+    }
+    void authenticate(() => api.signup(signupForm), signupForm.name.trim());
   }
   async function run(action) {
     setBusy(true);
@@ -471,7 +503,8 @@ export default function App() {
       b.date.localeCompare(a.date) ||
       String(b.created_at || "").localeCompare(String(a.created_at || "")),
   );
-  const weeks = weeklyTotals(transactions),
+  // In API mode the weekly totals come from the server (Tiger Data time_bucket)
+  const weeks = data?.weekly ?? weeklyTotals(transactions),
     currentWeek = weeks.find((w) => {
       const d = new Date();
       d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -513,36 +546,117 @@ export default function App() {
             <span>Cashecho</span>
           </div>
           <p className="login-subtitle">
-            Sign in to manage cash flow, debt planning, and daily spending.
+            {authMode === "login"
+              ? "Sign in to manage cash flow, debt planning, and daily spending."
+              : "Create an account to save your business cash plan and sign back in later."}
           </p>
-          <form className="login-form" onSubmit={handleLoginSubmit}>
-            <label>
-              <span>Email</span>
-              <input
-                type="email"
-                value={loginForm.email}
-                onChange={(event) =>
-                  setLoginForm({ ...loginForm, email: event.target.value })
-                }
-                placeholder="you@example.com"
-              />
-            </label>
-            <label>
-              <span>Password</span>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(event) =>
-                  setLoginForm({ ...loginForm, password: event.target.value })
-                }
-                placeholder="Enter your password"
-              />
-            </label>
-            {error && <p className="login-error">{error}</p>}
-            <button type="submit" className="button primary login-button">
-              Log in
+          <div
+            className="auth-mode-switch"
+            role="tablist"
+            aria-label="Authentication mode"
+          >
+            <button
+              type="button"
+              className={`auth-mode ${authMode === "login" ? "active" : ""}`}
+              onClick={() => {
+                setAuthMode("login");
+                setError("");
+              }}
+            >
+              Sign in
             </button>
-          </form>
+            <button
+              type="button"
+              className={`auth-mode ${authMode === "signup" ? "active" : ""}`}
+              onClick={() => {
+                setAuthMode("signup");
+                setError("");
+              }}
+            >
+              Sign up
+            </button>
+          </div>
+          {authMode === "login" ? (
+            <form className="login-form" onSubmit={handleLoginSubmit}>
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={(event) =>
+                    setLoginForm({ ...loginForm, email: event.target.value })
+                  }
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(event) =>
+                    setLoginForm({ ...loginForm, password: event.target.value })
+                  }
+                  placeholder="Enter your password"
+                />
+              </label>
+              {error && <p className="login-error">{error}</p>}
+              <button
+                type="submit"
+                className="button primary login-button"
+                disabled={authBusy}
+              >
+                {authBusy ? "Signing in…" : "Log in"}
+              </button>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={handleSignupSubmit}>
+              <label>
+                <span>Full name</span>
+                <input
+                  type="text"
+                  value={signupForm.name}
+                  onChange={(event) =>
+                    setSignupForm({ ...signupForm, name: event.target.value })
+                  }
+                  placeholder="Your name"
+                />
+              </label>
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={signupForm.email}
+                  onChange={(event) =>
+                    setSignupForm({ ...signupForm, email: event.target.value })
+                  }
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={signupForm.password}
+                  onChange={(event) =>
+                    setSignupForm({
+                      ...signupForm,
+                      password: event.target.value,
+                    })
+                  }
+                  placeholder="At least 8 characters"
+                />
+              </label>
+              {error && <p className="login-error">{error}</p>}
+              <button
+                type="submit"
+                className="button primary login-button"
+                disabled={authBusy}
+              >
+                {authBusy ? "Creating account…" : "Create account"}
+              </button>
+            </form>
+          )}
           {!DEMO && (
             <>
               <div className="login-divider">
@@ -639,8 +753,12 @@ export default function App() {
       <main>
         <header className="topbar">
           <span>
-            <span className="status-dot" />
-            {DEMO ? "Interactive demo" : "Connected to your team API"}
+            {DEMO && (
+              <>
+                <span className="status-dot" />
+                Interactive demo
+              </>
+            )}
           </span>
           <div className="top-actions">
             {DEMO && (

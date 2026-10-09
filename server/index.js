@@ -24,6 +24,7 @@ app.use('/api/debts', require('./routes/debts'));
 app.use('/api/wall', require('./routes/wall'));
 
 app.use('/api/parse', require('./routes/parse'));
+app.use('/api/alert', require('./routes/alert'));
 app.use('/api', require('./routes/voice').router); // /api/transcribe and /api/speak (ElevenLabs)
 
 const PORT = process.env.PORT || 3001;

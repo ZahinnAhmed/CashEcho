@@ -7,6 +7,8 @@ CREATE TABLE users (
   email         TEXT NOT NULL UNIQUE,
   name          TEXT,
   picture       TEXT,
+  -- Salted scrypt hash for email+password accounts; NULL for Google-only accounts
+  password_hash TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -129,3 +131,29 @@ CREATE TABLE settings (
   value   TEXT NOT NULL,
   PRIMARY KEY (user_id, key)
 );
+
+
+-- ============================================================
+-- Tiger Data continuous aggregate: daily_totals
+-- One row per user per day, kept up to date automatically. The forecast (/api/wall) and the
+-- weekly totals (/api/transactions/weekly) read this instead of scanning every transaction.
+-- Run this with psql (\i), which sends each statement on its own.
+-- ============================================================
+CREATE MATERIALIZED VIEW daily_totals
+WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT
+  user_id,
+  time_bucket('1 day', occurred_at) AS day,
+  SUM(CASE WHEN type = 'income'  THEN amount ELSE 0 END) AS income,
+  SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expenses,
+  SUM(CASE WHEN category <> 'loan_payment'
+           THEN CASE WHEN type = 'income' THEN amount ELSE -amount END
+           ELSE 0 END) AS net_excl_loans
+FROM transactions
+GROUP BY user_id, time_bucket('1 day', occurred_at)
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('daily_totals',
+  start_offset => NULL,
+  end_offset => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '1 hour');

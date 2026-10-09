@@ -13,15 +13,19 @@ if (!enabled) {
   console.warn('GOOGLE_CLIENT_ID is not set: the API is NOT protected by login.');
 }
 
-// Creates the user on first sign-in, or updates their name, picture and last login
-async function saveUser({ email, name, picture }) {
+// Creates the user on first sign-in, or updates their name, picture and last login.
+// verified=true means Google confirmed this email. If the same email was registered earlier
+// with a password (never verified), that password is removed so only the real owner,
+// signing in through Google, controls the account.
+async function saveUser({ email, name, picture }, { verified = false } = {}) {
   const result = await pool.query(
     `INSERT INTO users (email, name, picture)
      VALUES ($1, $2, $3)
      ON CONFLICT (email) DO UPDATE
-       SET name = EXCLUDED.name, picture = EXCLUDED.picture, last_login_at = now()
+       SET name = EXCLUDED.name, picture = EXCLUDED.picture, last_login_at = now(),
+           password_hash = CASE WHEN $4 THEN NULL ELSE users.password_hash END
      RETURNING id, email, name, picture`,
-    [email, name, picture]
+    [email, name, picture, verified]
   );
   return result.rows[0];
 }

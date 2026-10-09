@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db');
+const { refreshDay } = require('../db/refresh');
 
 const router = express.Router();
 
@@ -16,6 +17,26 @@ router.get('/', async (req, res) => {
       [req.user.id]
     );
     res.json(result.rows.map(toTransaction));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Weekly income and expenses, newest week first (weeks start on Monday).
+// This reads Tiger Data's daily_totals continuous aggregate and groups it with time_bucket.
+router.get('/weekly', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT to_char(time_bucket('7 days', day, TIMESTAMPTZ '2000-01-03 00:00:00+00') AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+              SUM(income) AS income,
+              SUM(expenses) AS expenses
+       FROM daily_totals
+       WHERE user_id = $1
+       GROUP BY 1
+       ORDER BY 1 DESC`,
+      [req.user.id]
+    );
+    res.json(result.rows.map((r) => ({ date: r.date, income: Number(r.income), expenses: Number(r.expenses) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -45,6 +66,7 @@ router.post('/', async (req, res) => {
        RETURNING *, ${DATE_COLUMN}`,
       [date || null, type, amount, category, vendor, payment_method, note, raw_text, req.user.id]
     );
+    await refreshDay(result.rows[0].date);
     res.status(201).json(toTransaction(result.rows[0]));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -58,10 +80,15 @@ router.delete('/:id', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    const result = await pool.query(
+      `DELETE FROM transactions WHERE id = $1 AND user_id = $2
+       RETURNING to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date`,
+      [id, req.user.id]
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'transaction not found' });
     }
+    await refreshDay(result.rows[0].date);
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: err.message });

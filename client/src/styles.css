@@ -109,6 +109,32 @@ a {
   margin-bottom: 22px;
 }
 
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  background: #edf3e9;
+  border: 1px solid #dfead8;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.auth-mode {
+  border: none;
+  background: transparent;
+  color: #4e635a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.auth-mode.active {
+  background: #fff;
+  color: #1f4d3d;
+  box-shadow: 0 1px 2px rgba(22, 46, 33, 0.08);
+}
+
 .login-form {
   display: grid;
   gap: 18px;
@@ -140,6 +166,64 @@ a {
 .login-button {
   width: 100%;
   justify-content: center;
+}
+
+.google-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #dfe7d6;
+  color: #1f473d;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 600;
+}
+
+.user-badge {
+  border-radius: 999px;
+  background: #edf3e9;
+  color: #1f4d3d;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sync-button {
+  min-width: 170px;
+}
+
+.google-calendar-box {
+  background: #edf5ea;
+  border: 1px solid #dfead8;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.google-calendar-box h3 {
+  margin-bottom: 10px;
+  color: #1b4f3d;
+}
+
+.google-calendar-box ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.google-calendar-box li {
+  display: grid;
+  gap: 4px;
+  color: #375a4c;
+}
+
+.google-calendar-box li span {
+  font-size: 12px;
+  color: #607165;
 }
 
 .app-shell {
