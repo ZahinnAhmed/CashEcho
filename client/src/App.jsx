@@ -954,7 +954,7 @@ export default function App() {
                     : "Your next 90 days of cash and loan payments, together."}
               </p>
             </div>
-            {tab === "wall" && (
+            {(tab === "wall" || tab === "ledger") && (
               <button
                 className="button outline"
                 disabled={!data}
