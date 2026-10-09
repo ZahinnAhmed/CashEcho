@@ -1,10 +1,14 @@
 // L6: runs test/voice-cases.json through /api/parse (audio cases go through
 // /api/transcribe first) and checks each field against what we expect.
 // Usage: npm run voice:eval [-- https://your-api-url]
+// With Google login on, pass a session token: CASHECHO_TOKEN=... npm run voice:eval
 const fs = require("node:fs");
 const path = require("node:path");
 
 const API = (process.argv[2] || "http://localhost:3001").replace(/\/$/, "");
+const AUTH = process.env.CASHECHO_TOKEN
+  ? { Authorization: `Bearer ${process.env.CASHECHO_TOKEN}` }
+  : {};
 const CASES = path.join(__dirname, "..", "test", "voice-cases.json");
 const AUDIO_DIR = path.join(__dirname, "..", "test", "audio");
 const PASS_RATE = 13 / 15;
@@ -42,7 +46,7 @@ async function post(route, body) {
   const json = !(body instanceof FormData);
   const res = await fetch(`${API}/api${route}`, {
     method: "POST",
-    headers: json ? { "Content-Type": "application/json" } : {},
+    headers: { ...(json ? { "Content-Type": "application/json" } : {}), ...AUTH },
     body: json ? JSON.stringify(body) : body,
     signal: AbortSignal.timeout(30000),
   });
