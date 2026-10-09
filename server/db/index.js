@@ -11,6 +11,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }, // Tiger Data requires SSL
 });
 
+// A dropped idle connection (Wi-Fi change, laptop sleep) shouldn't crash the server;
+// the pool opens a fresh connection on the next query.
+pool.on('error', (err) => console.error('Database connection lost:', err.message));
+
 module.exports = pool;
 
 // Run directly (`node db/index.js`) to test the connection.
