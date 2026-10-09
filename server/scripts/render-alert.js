@@ -11,7 +11,10 @@ const API = "http://localhost:3001";
 const OUT = path.join(__dirname, "..", "..", "client", "public", "demo", "alert.mp3");
 
 async function alertText() {
-  const res = await fetch(`${API}/api/alert`).catch(() => {
+  // With Google login on, pass a session token: CASHECHO_TOKEN=... node scripts/render-alert.js
+  const token = process.env.CASHECHO_TOKEN;
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(`${API}/api/alert`, { headers }).catch(() => {
     throw new Error(`Can't reach ${API}. Start the API (node index.js) or pass the alert text.`);
   });
   if (!res.ok) throw new Error(`GET /api/alert → HTTP ${res.status}. Pass the alert text instead.`);
