@@ -12,7 +12,8 @@ const DATE_COLUMN = "to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS da
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT *, ${DATE_COLUMN} FROM transactions ORDER BY occurred_at DESC`
+      `SELECT *, ${DATE_COLUMN} FROM transactions WHERE user_id = $1 ORDER BY occurred_at DESC`,
+      [req.user.id]
     );
     res.json(result.rows.map(toTransaction));
   } catch (err) {
@@ -39,10 +40,10 @@ router.post('/', async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO transactions
-         (occurred_at, type, amount, category, vendor, payment_method, note, raw_text)
-       VALUES (COALESCE(($1::date + interval '12 hours') AT TIME ZONE 'UTC', now()), $2, $3, $4, $5, $6, $7, $8)
+         (user_id, occurred_at, type, amount, category, vendor, payment_method, note, raw_text)
+       VALUES ($9, COALESCE(($1::date + interval '12 hours') AT TIME ZONE 'UTC', now()), $2, $3, $4, $5, $6, $7, $8)
        RETURNING *, ${DATE_COLUMN}`,
-      [date || null, type, amount, category, vendor, payment_method, note, raw_text]
+      [date || null, type, amount, category, vendor, payment_method, note, raw_text, req.user.id]
     );
     res.status(201).json(toTransaction(result.rows[0]));
   } catch (err) {
@@ -57,7 +58,7 @@ router.delete('/:id', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('DELETE FROM transactions WHERE id = $1', [id]);
+    const result = await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [id, req.user.id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'transaction not found' });
     }

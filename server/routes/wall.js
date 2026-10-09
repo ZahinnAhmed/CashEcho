@@ -53,19 +53,22 @@ router.get('/', async (req, res) => {
     // Cash on hand = opening_cash (settings table, else STARTING_CASH from .env, else 0)
     // + all income - all expenses logged so far
     const [opening, net, recent, debtRows] = await Promise.all([
-      pool.query("SELECT value FROM settings WHERE key = 'opening_cash'"),
+      pool.query("SELECT value FROM settings WHERE user_id = $1 AND key = 'opening_cash'", [req.user.id]),
       pool.query(
         `SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) AS net
-         FROM transactions`
+         FROM transactions WHERE user_id = $1`,
+        [req.user.id]
       ),
       // Last 60 days. Loan payments are left out because future loan payments are subtracted below.
       pool.query(
         `SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) AS net
          FROM transactions
-         WHERE category <> 'loan_payment'
-           AND occurred_at >= date_trunc('day', now()) - interval '59 days'`
+         WHERE user_id = $1
+           AND category <> 'loan_payment'
+           AND occurred_at >= date_trunc('day', now()) - interval '59 days'`,
+        [req.user.id]
       ),
-      pool.query('SELECT * FROM debts ORDER BY id'),
+      pool.query('SELECT * FROM debts WHERE user_id = $1 ORDER BY id', [req.user.id]),
     ]);
 
     const openingCash = Number(opening.rows[0]?.value ?? process.env.STARTING_CASH ?? 0);

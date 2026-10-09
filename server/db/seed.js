@@ -2,9 +2,11 @@
 // plus three loans, one of them with a balloon payment that causes a shortfall.
 // Same data as the frontend's demo mode (client/src/demo.js).
 //
-//   node db/seed.js           seeds only if the tables are empty
-//   node db/seed.js --reset   deletes ALL transactions and debts first, then seeds
+// The data is created for one user, identified by their Google email:
+//   node db/seed.js you@gmail.com           seeds only if that user has no data yet
+//   node db/seed.js you@gmail.com --reset   deletes THAT user's transactions and debts first, then seeds
 const pool = require('./index');
+const { saveUser } = require('../auth');
 
 const dateKey = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -60,6 +62,12 @@ function buildPayments(debt, today) {
 
 async function main() {
   const reset = process.argv.includes('--reset');
+  const email = process.argv.slice(2).find((a) => a.includes('@'));
+  if (!email) {
+    console.error('Usage: node db/seed.js you@gmail.com [--reset]');
+    process.exit(1);
+  }
+  const user = await saveUser({ email, name: email, picture: null }); // keeps their name if they already signed in
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -68,36 +76,38 @@ async function main() {
     await client.query('BEGIN');
 
     const existing = await client.query(
-      'SELECT (SELECT count(*) FROM transactions) AS t, (SELECT count(*) FROM debts) AS d'
+      `SELECT (SELECT count(*) FROM transactions WHERE user_id = $1) AS t,
+              (SELECT count(*) FROM debts WHERE user_id = $1) AS d`,
+      [user.id]
     );
     const { t, d } = existing.rows[0];
     if (Number(t) + Number(d) > 0) {
       if (!reset) {
-        console.log(`Database already has ${t} transactions and ${d} debts. Run with --reset to replace them.`);
+        console.log(`${email} already has ${t} transactions and ${d} debts. Run with --reset to replace them.`);
         await client.query('ROLLBACK');
         return;
       }
-      await client.query('DELETE FROM debts'); // debt_payments go with them (ON DELETE CASCADE)
-      await client.query('DELETE FROM transactions');
+      await client.query('DELETE FROM debts WHERE user_id = $1', [user.id]); // debt_payments go with them (ON DELETE CASCADE)
+      await client.query('DELETE FROM transactions WHERE user_id = $1', [user.id]);
     }
 
     const seedTransactions = buildTransactions(today);
 
     for (const tx of seedTransactions) {
       await client.query(
-        `INSERT INTO transactions (occurred_at, type, amount, category, vendor, payment_method, note)
-         VALUES (($1::date + interval '12 hours') AT TIME ZONE 'UTC', $2, $3, $4, $5, $6, $7)`,
-        [tx.date, tx.type, tx.amount, tx.category, tx.vendor, tx.payment_method, tx.note]
+        `INSERT INTO transactions (user_id, occurred_at, type, amount, category, vendor, payment_method, note)
+         VALUES ($8, ($1::date + interval '12 hours') AT TIME ZONE 'UTC', $2, $3, $4, $5, $6, $7)`,
+        [tx.date, tx.type, tx.amount, tx.category, tx.vendor, tx.payment_method, tx.note, user.id]
       );
     }
 
     for (const debt of buildDebts(today)) {
       const result = await client.query(
         `INSERT INTO debts
-           (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+           (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
         [debt.lender, debt.kind, debt.balance, debt.monthly_payment, debt.rate_pct,
-         debt.payment_day, debt.end_date, debt.balloon_amount, debt.balloon_date]
+         debt.payment_day, debt.end_date, debt.balloon_amount, debt.balloon_date, user.id]
       );
       for (const p of buildPayments(debt, today)) {
         await client.query(
@@ -110,13 +120,13 @@ async function main() {
     // Set the opening balance so cash on hand today is $2,400 (the demo story: a balloon payment is coming)
     const net = seedTransactions.reduce((n, t) => n + (t.type === 'income' ? t.amount : -t.amount), 0);
     await client.query(
-      `INSERT INTO settings (key, value) VALUES ('opening_cash', $1)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-      [String(DEMO_CASH - net)]
+      `INSERT INTO settings (user_id, key, value) VALUES ($1, 'opening_cash', $2)
+       ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value`,
+      [user.id, String(DEMO_CASH - net)]
     );
 
     await client.query('COMMIT');
-    console.log('Seeded 3 debts and 90 days of transactions.');
+    console.log(`Seeded 3 debts and 90 days of transactions for ${email}.`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Seed failed:', err.message);

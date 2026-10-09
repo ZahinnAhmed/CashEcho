@@ -47,7 +47,7 @@ function buildPayments(debt) {
 
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM debts ORDER BY id');
+    const result = await pool.query('SELECT * FROM debts WHERE user_id = $1 ORDER BY id', [req.user.id]);
     res.json(result.rows.map(toDebt));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -85,13 +85,14 @@ router.post('/', async (req, res) => {
     await client.query('BEGIN');
     const debtResult = await client.query(
       `INSERT INTO debts
-         (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         lender, kind || null, balance, monthly_payment, rate_pct || null, payment_day, end_date,
         balloon_amount > 0 ? balloon_amount : null,
         balloon_amount > 0 ? balloon_date : null,
+        req.user.id,
       ]
     );
     const debt = toDebt(debtResult.rows[0]);

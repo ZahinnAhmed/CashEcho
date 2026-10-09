@@ -1,0 +1,77 @@
+[
+  {
+    "say": "Paid 340 for flour at Restaurant Depot",
+    "expect": { "type": "expense", "amount": 340, "category": "supplies", "vendor": "Restaurant Depot", "date": "today" }
+  },
+  {
+    "say": "Restaurant Depot, three forty, flour and oil, paid cash",
+    "expect": { "type": "expense", "amount": 340, "category": "supplies", "vendor": "Restaurant Depot", "payment_method": "cash" }
+  },
+  {
+    "say": "Picked up napkins and foil at Jetro, eighty seven fifty on the card",
+    "expect": { "type": "expense", "amount": 87.5, "category": "supplies", "vendor": "Jetro", "payment_method": "card" }
+  },
+  {
+    "say": "Sysco delivery came in, two hundred ten bucks",
+    "expect": { "type": "expense", "amount": 210, "category": "supplies", "vendor": "Sysco" }
+  },
+  {
+    "say": "Sold 40 gyros, about 480 cash",
+    "expect": { "type": "income", "amount": 480, "category": "sales", "payment_method": "cash" }
+  },
+  {
+    "say": "Made six fifty in sales today, mostly Square",
+    "expect": { "type": "income", "amount": 650, "category": "sales", "payment_method": "card", "date": "today" }
+  },
+  {
+    "say": "Got 95 bucks on Cash App for a catering order",
+    "expect": { "type": "income", "amount": 95, "category": "sales", "payment_method": "other" }
+  },
+  {
+    "say": "Zelle'd the commissary 600 for rent",
+    "expect": { "type": "expense", "amount": 600, "category": "rent", "vendor": "commissary", "payment_method": "other" }
+  },
+  {
+    "say": "Paid the SBA 520",
+    "expect": { "type": "expense", "amount": 520, "category": "loan_payment", "vendor": "SBA" }
+  },
+  {
+    "say": "Loan payment to the equipment finance company, 275",
+    "expect": { "type": "expense", "amount": 275, "category": "loan_payment" }
+  },
+  {
+    "say": "Paid my helper 120 cash for Saturday",
+    "expect": { "type": "expense", "amount": 120, "category": "payroll", "payment_method": "cash" }
+  },
+  {
+    "say": "Bought a new propane tank for the cart, a hundred twenty bucks",
+    "expect": { "type": "expense", "amount": 120, "category": "equipment" }
+  },
+  {
+    "say": "Ice from the deli, a buck fifty",
+    "expect": { "type": "expense", "amount": 1.5, "category": "supplies" }
+  },
+  {
+    "say": "Yesterday I spent 62 on onions and tomatoes at the commissary",
+    "expect": { "type": "expense", "amount": 62, "category": "supplies", "vendor": "commissary", "date": "yesterday" }
+  },
+  {
+    "say": "This morning I sold four eighty worth of platters",
+    "expect": { "type": "income", "amount": 480, "category": "sales", "date": "today" }
+  },
+  {
+    "say": "Paid $3.40 for flour at Restaurant Depot",
+    "from": "Real Scribe transcript of 'Paid three forty for flour at Restaurant Depot'",
+    "expect": { "type": "expense", "amount": 340, "category": "supplies", "vendor": "Restaurant Depot" }
+  },
+  {
+    "say": "Made $6.50 in sales today",
+    "from": "Real Scribe transcript of 'Made six fifty in sales today'",
+    "expect": { "type": "income", "amount": 650, "category": "sales", "date": "today" }
+  },
+  {
+    "say": "Cisco delivery came in 210 bucks",
+    "from": "Real Scribe transcript of 'Sysco delivery came in, two hundred ten bucks'",
+    "expect": { "type": "expense", "amount": 210, "category": "supplies", "vendor": "Sysco" }
+  }
+]

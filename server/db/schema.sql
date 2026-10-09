@@ -1,8 +1,25 @@
 -- ============================================================
+-- TABLE 0: users
+-- One row per Google account that has signed in. Every other table points at it.
+-- ============================================================
+CREATE TABLE users (
+  id            SERIAL PRIMARY KEY,
+  email         TEXT NOT NULL UNIQUE,
+  name          TEXT,
+  picture       TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+-- ============================================================
 -- TABLE 1: transactions
 -- Every sale or expense the owner says out loud becomes one row.
 -- ============================================================
 CREATE TABLE transactions (
+  -- Whose transaction this is; deleting a user deletes their data
+  user_id        INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
   -- Row number that counts up by itself. You never type it.
   id             SERIAL,
 
@@ -40,6 +57,7 @@ CREATE TABLE transactions (
 -- Turns the table into a time-series table split into chunks by date,
 -- so "total per week" queries stay fast.
 SELECT create_hypertable('transactions', 'occurred_at');
+CREATE INDEX transactions_user_idx ON transactions (user_id, occurred_at DESC);
 
 
 -- ============================================================
@@ -48,6 +66,9 @@ SELECT create_hypertable('transactions', 'occurred_at');
 -- ============================================================
 CREATE TABLE debts (
   id              SERIAL PRIMARY KEY,
+
+  -- Whose loan this is
+  user_id         INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
   -- Who the loan is from ("SBA", "Kabbage").
   lender          TEXT NOT NULL,
@@ -74,6 +95,7 @@ CREATE TABLE debts (
   balloon_amount  NUMERIC(12,2),
   balloon_date    DATE
 );
+CREATE INDEX debts_user_idx ON debts (user_id);
 
 
 -- ============================================================
@@ -97,10 +119,13 @@ CREATE TABLE debt_payments (
 
 -- ============================================================
 -- TABLE 4: settings
--- Small key/value store. 'opening_cash' is the cash on hand before any logged
--- transactions; the debt wall adds all logged income and expenses to it.
+-- Small key/value store, one set per user. 'opening_cash' is the cash on hand
+-- before any logged transactions; the debt wall adds all logged income and
+-- expenses to it.
 -- ============================================================
-CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+CREATE TABLE settings (
+  user_id INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key     TEXT NOT NULL,
+  value   TEXT NOT NULL,
+  PRIMARY KEY (user_id, key)
 );
