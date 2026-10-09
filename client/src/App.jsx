@@ -42,6 +42,14 @@ import {
   validateDebt,
 } from "./model.js";
 import { useRecorder } from "./useRecorder.js";
+import VoiceSettings from "./components/VoiceSettings.jsx";
+import {
+  confirmationLine,
+  playSound,
+  speak,
+  stopAudio,
+  unlockAudio,
+} from "./lib/voiceClient.js";
 
 const tabs = [
   { id: "log", label: "Log money", icon: Mic },
@@ -344,9 +352,7 @@ export default function App() {
     [search, setSearch] = useState(""),
     [playing, setPlaying] = useState(false),
     [cashInput, setCashInput] = useState("");
-  const audioRef = useRef(null),
-    urlRef = useRef(null),
-    toastTimer = useRef(null);
+  const toastTimer = useRef(null);
   async function load() {
     setLoading(true);
     setError("");
@@ -371,9 +377,7 @@ export default function App() {
   useEffect(() => {
     void load();
     return () => {
-      audioRef.current?.pause();
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      window.speechSynthesis?.cancel();
+      stopAudio();
       clearTimeout(toastTimer.current);
     };
   }, []);
@@ -403,73 +407,35 @@ export default function App() {
     }
   }
   async function parse(textValue) {
+    setText(textValue); // keeps a spoken transcript editable if parsing fails
     const value = await api.parse(textValue);
     setDraft(validateTransaction(value));
     setManual(false);
-    setText(textValue);
   }
   const recorder = useRecorder(parse, setError);
-  async function playAudio(source) {
-    audioRef.current?.pause();
-    if (urlRef.current) {
-      URL.revokeObjectURL(urlRef.current);
-      urlRef.current = null;
-    }
-    const url =
-      source instanceof Blob
-        ? (urlRef.current = URL.createObjectURL(source))
-        : source;
-    if (!url) throw new Error("The voice API returned no audio.");
-    const audio = new Audio(url);
-    audioRef.current = audio;
+  // Playback goes through lib/voiceClient.js so iPhone Safari allows it after a tap.
+  function playAudio(source) {
     setPlaying(true);
-    audio.onended = () => setPlaying(false);
-    audio.onerror = () => {
-      setPlaying(false);
-      setError("Could not play the audio. Try again.");
-    };
-    try {
-      await audio.play();
-    } catch (e) {
-      setPlaying(false);
-      throw e;
-    }
+    return playSound(source, () => setPlaying(false));
   }
-  async function say(textValue) {
-    if (DEMO) {
-      if (!window.speechSynthesis)
-        throw new Error("Speech playback is unavailable in this browser.");
-      speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(textValue);
-      utterance.rate = 0.94;
-      utterance.onend = () => setPlaying(false);
-      utterance.onerror = () => setPlaying(false);
-      setPlaying(true);
-      speechSynthesis.speak(utterance);
-      return;
-    }
-    const result = await api.speak(textValue);
-    await playAudio(
-      result instanceof Blob ? result : result.audio_url || result.audioUrl,
-    );
+  function say(textValue) {
+    setPlaying(true);
+    return speak(textValue, () => setPlaying(false));
   }
   async function save(e) {
     e.preventDefault();
+    unlockAudio();
     await run(async () => {
       const saved = await api.save(validateTransaction(draft));
       setLastSaved(saved);
       setDraft(null);
       setText("");
       setManual(false);
-      await load();
       notify(`Logged ${money(saved.amount)} ${saved.type}.`);
-      try {
-        await say(
-          `Logged ${money(saved.amount)} ${saved.type}, ${title(saved.category)}.`,
-        );
-      } catch {
-        notify("Transaction saved. Voice playback is unavailable.");
-      }
+      say(confirmationLine(saved)).catch(() =>
+        notify("Transaction saved. Voice playback is unavailable."),
+      );
+      await load();
     });
   }
   async function remove(t) {
@@ -497,19 +463,22 @@ export default function App() {
     ? `${shortfall.lender} has a ${money(shortfall.amount)} payment due ${prettyDate(shortfall.due_date)}. Based on your current cash and recent activity, you are projected to be ${money(shortfall.shortfall)} short. Review the payment schedule and your upcoming income.`
     : "Your projected cash covers the scheduled payments over the next 90 days. Keep logging transactions to update the forecast.";
   async function playAlert() {
+    unlockAudio();
     await run(async () => {
       if (playing) {
-        audioRef.current?.pause();
-        window.speechSynthesis?.cancel();
-        setPlaying(false);
+        stopAudio();
         return;
       }
       if (DEMO) await say(alertText);
       else {
-        const result = await api.alert();
-        if (result.audio_url || result.audioUrl)
-          await playAudio(result.audio_url || result.audioUrl);
-        else await say(result.text || result.alert_text || alertText);
+        // If /api/alert is down, play the alert pre-rendered for the demo.
+        const result = await api
+          .alert()
+          .catch(() => ({ audio_url: "/demo/alert.mp3" }));
+        const url = result.audio_url || result.audioUrl;
+        const spoken = result.text || result.alert_text || alertText;
+        if (url) await playAudio(url).catch(() => say(spoken));
+        else await say(spoken);
       }
     });
   }
@@ -761,6 +730,7 @@ export default function App() {
                         }
                         onClick={() => {
                           setError("");
+                          unlockAudio();
                           recorder.status === "recording"
                             ? recorder.stop()
                             : void recorder.start();
@@ -796,16 +766,11 @@ export default function App() {
                           : "“Paid $340 for flour at Restaurant Depot.”"}
                       </span>
                     </div>
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={recorder.fallback}
-                        disabled={recorder.status !== "idle"}
-                        onChange={(e) => recorder.setFallback(e.target.checked)}
-                      />
-                      Use browser speech recognition{" "}
-                      {DEMO && <span>(demo)</span>}
-                    </label>
+                    <VoiceSettings
+                      recorder={recorder}
+                      disabled={busy || !!draft}
+                      onError={setError}
+                    />
                     {DEMO && (
                       <p className="micro-copy">
                         Demo uses a simple text parser and browser voice. Review

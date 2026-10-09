@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api, DEMO } from "./api.js";
+import {
+  getUseFallback,
+  setUseFallback,
+  webSpeechAvailable,
+} from "./lib/voiceClient.js";
 export function useRecorder(onText, onError) {
   const [status, setStatus] = useState("idle");
   const [seconds, setSeconds] = useState(0);
@@ -9,7 +14,13 @@ export function useRecorder(onText, onError) {
     timer = useRef(null),
     active = useRef(true),
     chunks = useRef([]);
-  const [fallback, setFallback] = useState(DEMO);
+  const [fallback, setFallbackState] = useState(
+    () => webSpeechAvailable() && (getUseFallback() ?? DEMO),
+  );
+  function setFallback(on) {
+    setUseFallback(on);
+    setFallbackState(on);
+  }
   function clean() {
     clearInterval(timer.current);
     stream.current?.getTracks().forEach((t) => t.stop());
@@ -37,6 +48,21 @@ export function useRecorder(onText, onError) {
       onError(e.message);
     } finally {
       if (active.current) setStatus("idle");
+    }
+  }
+  // Mic recordings and the backup demo clips both go through here.
+  async function send(blob) {
+    setStatus("sending");
+    try {
+      await deliver(await api.transcribe(blob));
+    } catch (e) {
+      if (e.fallback && webSpeechAvailable()) {
+        setFallback(true);
+        onError(
+          "ElevenLabs is unavailable, so backup voice input is now on. Tap the mic and say it again.",
+        );
+      } else onError(e.message);
+      setStatus("idle");
     }
   }
   async function start() {
@@ -111,17 +137,10 @@ export function useRecorder(onText, onError) {
           onError("Recording failed. Please try again.");
         }
       };
-      rec.onstop = async () => {
+      rec.onstop = () => {
         const blob = new Blob(chunks.current, { type: rec.mimeType });
         clean();
-        if (!active.current) return;
-        setStatus("sending");
-        try {
-          await deliver(await api.transcribe(blob));
-        } catch (e) {
-          onError(e.message);
-          setStatus("idle");
-        }
+        if (active.current) void send(blob);
       };
       rec.start();
       setStatus("recording");
@@ -145,5 +164,5 @@ export function useRecorder(onText, onError) {
   useEffect(() => {
     if (seconds >= 60 && status === "recording") stop();
   }, [seconds, status]);
-  return { status, seconds, fallback, setFallback, start, stop };
+  return { status, seconds, fallback, setFallback, start, stop, send };
 }
