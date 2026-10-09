@@ -6,6 +6,8 @@ import {
   weeklyTotals,
   validateTransaction,
   validateDebt,
+  registerAccount,
+  loginAccount,
 } from "../src/model.js";
 const debt = {
   id: "1",
@@ -120,4 +122,32 @@ test("rejects balloon after maturity and noninteger payment day", () => {
     /Balloon date/,
   );
   assert.throws(() => validateDebt({ ...debt, payment_day: 1.5 }), /1–31/);
+});
+test("registers and authenticates users with stored credentials", () => {
+  const users = [
+    { id: "u-1", name: "Ada", email: "ada@example.com", password: "secret123" },
+  ];
+
+  const updated = registerAccount(users, {
+    name: "Grace",
+    email: "grace@example.com",
+    password: "secure456",
+  });
+
+  assert.equal(updated.length, 2);
+  assert.equal(updated[1].email, "grace@example.com");
+  assert.deepEqual(loginAccount(updated, { email: "ada@example.com", password: "secret123" }), {
+    id: "u-1",
+    name: "Ada",
+    email: "ada@example.com",
+    password: "secret123",
+  });
+  assert.throws(
+    () => loginAccount(updated, { email: "ada@example.com", password: "wrongpass" }),
+    /incorrect password/i,
+  );
+  assert.throws(
+    () => registerAccount(updated, { name: "", email: "bad", password: "short" }),
+    /valid name|valid email|at least 6 characters/i,
+  );
 });

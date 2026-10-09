@@ -24,6 +24,50 @@ export const addDays = (date, n) => {
 };
 export const prettyDate = (s) =>
   parseDate(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+export function normalizeAccountEmail(email = "") {
+  return String(email || "").trim().toLowerCase();
+}
+export function registerAccount(users = [], data = {}) {
+  const safeUsers = Array.isArray(users) ? users : [];
+  const name = String(data.name || "").trim();
+  const email = normalizeAccountEmail(data.email);
+  const password = String(data.password || "");
+
+  if (!name || name.length < 2)
+    throw new Error("Enter a valid name.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    throw new Error("Enter a valid email address.");
+  if (password.length < 6)
+    throw new Error("Password must be at least 6 characters.");
+  if (safeUsers.some((user) => normalizeAccountEmail(user.email) === email))
+    throw new Error("An account with that email already exists.");
+
+  return [
+    ...safeUsers,
+    {
+      id:
+        globalThis.crypto?.randomUUID?.() ||
+        `user-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name,
+      email,
+      password,
+    },
+  ];
+}
+export function loginAccount(users = [], data = {}) {
+  const safeUsers = Array.isArray(users) ? users : [];
+  const email = normalizeAccountEmail(data.email);
+  const password = String(data.password || "");
+  const user = safeUsers.find(
+    (account) => normalizeAccountEmail(account.email) === email,
+  );
+
+  if (!user) throw new Error("No account was found for that email.");
+  if (user.password !== password)
+    throw new Error("Incorrect password. Please try again.");
+
+  return { ...user };
+}
 export function validateTransaction(t) {
   if (!["income", "expense"].includes(t.type))
     throw new Error("Choose income or expense.");

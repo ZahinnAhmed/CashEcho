@@ -17,6 +17,7 @@ import {
   Undo2,
   TriangleAlert,
   Leaf,
+  CalendarSync,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -40,6 +41,8 @@ import {
   weeklyTotals,
   validateTransaction,
   validateDebt,
+  registerAccount,
+  loginAccount,
 } from "./model.js";
 import { useRecorder } from "./useRecorder.js";
 
@@ -70,6 +73,41 @@ const blankDebt = () => ({
 });
 const title = (s) =>
   s.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const USERS_KEY = "cashecho-users";
+const CURRENT_USER_KEY = "cashecho-current-user";
+
+function readSavedUsers() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(USERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function readCurrentUser() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(CURRENT_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeGoogleJwt(token) {
+  try {
+    const payload = token.split(".")[1];
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = atob(normalized);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
 
 function Field({ label, children }) {
   return (
@@ -327,8 +365,14 @@ function DebtForm({ onSave, onCancel, busy }) {
   );
 }
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(readCurrentUser()));
+  const [currentUser, setCurrentUser] = useState(readCurrentUser);
+  const [googleUser, setGoogleUser] = useState(null);
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [signupForm, setSignupForm] = useState({ name: "", email: "", password: "" });
   const [tab, setTab] = useState("log"),
     [data, setData] = useState(null),
     [error, setError] = useState(""),
@@ -388,9 +432,152 @@ export default function App() {
       setError("Please enter both your email and password.");
       return;
     }
-    setError("");
-    setIsLoggedIn(true);
+    try {
+      const users = readSavedUsers();
+      const account = loginAccount(users, {
+        email: loginForm.email,
+        password: loginForm.password,
+      });
+      setCurrentUser(account);
+      setIsLoggedIn(true);
+      setError("");
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
+      }
+    } catch (e) {
+      setError(e.message || "Unable to log in.");
+    }
   }
+  function handleSignupSubmit(event) {
+    event.preventDefault();
+    if (!signupForm.name.trim() || !signupForm.email.trim() || !signupForm.password.trim()) {
+      setError("Please fill in your name, email, and password.");
+      return;
+    }
+    try {
+      const users = readSavedUsers();
+      const account = registerAccount(users, signupForm);
+      const signedUpUser = account[account.length - 1];
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(USERS_KEY, JSON.stringify(account));
+        window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(signedUpUser));
+      }
+      setCurrentUser(signedUpUser);
+      setIsLoggedIn(true);
+      setError("");
+      setSignupForm({ name: "", email: "", password: "" });
+      setLoginForm({ email: signedUpUser.email, password: "" });
+      setAuthMode("login");
+    } catch (e) {
+      setError(e.message || "Unable to create your account.");
+    }
+  }
+  function handleLogout() {
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+    setGoogleUser(null);
+    setError("");
+    setAuthMode("login");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(CURRENT_USER_KEY);
+    }
+  }
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || typeof window === "undefined") return;
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response) => {
+            const payload = decodeGoogleJwt(response.credential);
+            if (!payload) {
+              setError("Google sign-in failed. Please try again.");
+              return;
+            }
+            setGoogleUser({
+              name: payload.name || payload.email || "Google user",
+              email: payload.email || "",
+              picture: payload.picture || "",
+            });
+            setError("");
+            setIsLoggedIn(true);
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+      }
+    };
+    document.body.appendChild(script);
+    return () => {
+      script.remove();
+    };
+  }, []);
+
+  async function handleGoogleCalendarSync() {
+    if (!GOOGLE_CLIENT_ID) {
+      setError("Add VITE_GOOGLE_CLIENT_ID to your .env file before enabling Google Calendar sync.");
+      return;
+    }
+    if (!window.google?.accounts?.oauth2) {
+      setError("Google calendar access is not ready yet. Try again in a moment.");
+      return;
+    }
+
+    setCalendarSyncing(true);
+    setError("");
+
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_CALENDAR_SCOPE,
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            throw new Error(tokenResponse.error_description || "Calendar access was denied.");
+          }
+
+          const response = await fetch(
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=10",
+            {
+              headers: {
+                Authorization: `Bearer ${tokenResponse.access_token}`,
+              },
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error("Unable to load Google Calendar events.");
+          }
+
+          const data = await response.json();
+          setCalendarEvents(data.items || []);
+          setNotice("Google Calendar synced.");
+        },
+      });
+
+      tokenClient.requestAccessToken();
+    } catch (e) {
+      setError(e.message || "Calendar sync failed.");
+    } finally {
+      setCalendarSyncing(false);
+    }
+  }
+
+  function handleGoogleLogin() {
+    if (!GOOGLE_CLIENT_ID) {
+      setError("Google sign-in is disabled until VITE_GOOGLE_CLIENT_ID is configured.");
+      return;
+    }
+    if (!window.google?.accounts?.id) {
+      setError("Google auth is still loading. Please try again in a moment.");
+      return;
+    }
+    window.google.accounts.id.prompt();
+  }
+
   async function run(action) {
     setBusy(true);
     setError("");
@@ -524,36 +711,109 @@ export default function App() {
             <span>Cashecho</span>
           </div>
           <p className="login-subtitle">
-            Sign in to manage cash flow, debt planning, and daily spending.
+            {authMode === "login"
+              ? "Sign in to manage cash flow, debt planning, and daily spending."
+              : "Create an account to save your business cash plan and sign back in later."}
           </p>
-          <form className="login-form" onSubmit={handleLoginSubmit}>
-            <label>
-              <span>Email</span>
-              <input
-                type="email"
-                value={loginForm.email}
-                onChange={(event) =>
-                  setLoginForm({ ...loginForm, email: event.target.value })
-                }
-                placeholder="you@example.com"
-              />
-            </label>
-            <label>
-              <span>Password</span>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(event) =>
-                  setLoginForm({ ...loginForm, password: event.target.value })
-                }
-                placeholder="Enter your password"
-              />
-            </label>
-            {error && <p className="login-error">{error}</p>}
-            <button type="submit" className="button primary login-button">
-              Log in
+          <div className="auth-mode-switch" role="tablist" aria-label="Authentication mode">
+            <button
+              type="button"
+              className={`auth-mode ${authMode === "login" ? "active" : ""}`}
+              onClick={() => {
+                setAuthMode("login");
+                setError("");
+              }}
+            >
+              Sign in
             </button>
-          </form>
+            <button
+              type="button"
+              className={`auth-mode ${authMode === "signup" ? "active" : ""}`}
+              onClick={() => {
+                setAuthMode("signup");
+                setError("");
+              }}
+            >
+              Sign up
+            </button>
+          </div>
+          {authMode === "login" ? (
+            <form className="login-form" onSubmit={handleLoginSubmit}>
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={(event) =>
+                    setLoginForm({ ...loginForm, email: event.target.value })
+                  }
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(event) =>
+                    setLoginForm({ ...loginForm, password: event.target.value })
+                  }
+                  placeholder="Enter your password"
+                />
+              </label>
+              {error && <p className="login-error">{error}</p>}
+              <button type="submit" className="button primary login-button">
+                Log in
+              </button>
+              <button
+                type="button"
+                className="google-button"
+                onClick={handleGoogleLogin}
+              >
+                Continue with Google
+              </button>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={handleSignupSubmit}>
+              <label>
+                <span>Full name</span>
+                <input
+                  type="text"
+                  value={signupForm.name}
+                  onChange={(event) =>
+                    setSignupForm({ ...signupForm, name: event.target.value })
+                  }
+                  placeholder="Your name"
+                />
+              </label>
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={signupForm.email}
+                  onChange={(event) =>
+                    setSignupForm({ ...signupForm, email: event.target.value })
+                  }
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={signupForm.password}
+                  onChange={(event) =>
+                    setSignupForm({ ...signupForm, password: event.target.value })
+                  }
+                  placeholder="At least 6 characters"
+                />
+              </label>
+              {error && <p className="login-error">{error}</p>}
+              <button type="submit" className="button primary login-button">
+                Create account
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -612,6 +872,24 @@ export default function App() {
             {DEMO ? "Interactive demo" : "Connected to your team API"}
           </span>
           <div className="top-actions">
+            {currentUser && <span className="user-badge">{currentUser.name}</span>}
+            {googleUser && (
+              <button
+                className="button outline sync-button"
+                disabled={calendarSyncing || busy}
+                onClick={() => void handleGoogleCalendarSync()}
+              >
+                <CalendarSync size={14} />
+                {calendarSyncing
+                  ? "Syncing…"
+                  : calendarEvents.length
+                    ? "Sync calendar"
+                    : "Sync Google Calendar"}
+              </button>
+            )}
+            <button className="text-button" onClick={handleLogout}>
+              Log out
+            </button>
             {DEMO && (
               <button
                 className="text-button"
@@ -628,6 +906,18 @@ export default function App() {
               >
                 <RefreshCw size={14} />
                 Reset demo
+              </button>
+            )}
+            {googleUser && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setGoogleUser(null);
+                  setCalendarEvents([]);
+                  setIsLoggedIn(false);
+                }}
+              >
+                Log out
               </button>
             )}
             <span className="date-label">
@@ -994,6 +1284,23 @@ export default function App() {
                     />
                   </section>
                   <section className="panel weekly">
+                    {calendarEvents.length > 0 && (
+                      <div className="google-calendar-box">
+                        <h3>Google Calendar sync</h3>
+                        <ul>
+                          {calendarEvents.slice(0, 4).map((event) => (
+                            <li key={event.id}>
+                              <strong>{event.summary || "Untitled event"}</strong>
+                              <span>
+                                {event.start?.dateTime
+                                  ? new Date(event.start.dateTime).toLocaleString()
+                                  : event.start?.date || "All day"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <h2>Weekly totals</h2>
                     <div className="table-wrap">
                       <table>
