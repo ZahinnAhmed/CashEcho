@@ -327,6 +327,8 @@ function DebtForm({ onSave, onCancel, busy }) {
   );
 }
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [tab, setTab] = useState("log"),
     [data, setData] = useState(null),
     [error, setError] = useState(""),
@@ -379,6 +381,15 @@ export default function App() {
     setNotice(message);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setNotice(""), 6000);
+  }
+  function handleLoginSubmit(event) {
+    event.preventDefault();
+    if (!loginForm.email.trim() || !loginForm.password.trim()) {
+      setError("Please enter both your email and password.");
+      return;
+    }
+    setError("");
+    setIsLoggedIn(true);
   }
   async function run(action) {
     setBusy(true);
@@ -502,6 +513,52 @@ export default function App() {
       }
     });
   }
+  if (!isLoggedIn) {
+    return (
+      <div className="login-screen">
+        <div className="login-card">
+          <div className="login-brand">
+            <span className="brand-symbol login-icon">
+              <Leaf size={22} />
+            </span>
+            <span>Cashecho</span>
+          </div>
+          <p className="login-subtitle">
+            Sign in to manage cash flow, debt planning, and daily spending.
+          </p>
+          <form className="login-form" onSubmit={handleLoginSubmit}>
+            <label>
+              <span>Email</span>
+              <input
+                type="email"
+                value={loginForm.email}
+                onChange={(event) =>
+                  setLoginForm({ ...loginForm, email: event.target.value })
+                }
+                placeholder="you@example.com"
+              />
+            </label>
+            <label>
+              <span>Password</span>
+              <input
+                type="password"
+                value={loginForm.password}
+                onChange={(event) =>
+                  setLoginForm({ ...loginForm, password: event.target.value })
+                }
+                placeholder="Enter your password"
+              />
+            </label>
+            {error && <p className="login-error">{error}</p>}
+            <button type="submit" className="button primary login-button">
+              Log in
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -516,7 +573,7 @@ export default function App() {
           <span className="brand-symbol">
             <Leaf size={24} />
           </span>
-          cartwise<span className="brand-dot">.</span>
+          Cashecho<span className="brand-dot">.</span>
         </a>
         <p className="sidebar-label">YOUR BUSINESS, IN VIEW</p>
         <nav aria-label="Main navigation">
@@ -543,7 +600,7 @@ export default function App() {
         <div className="business">
           <span className="avatar">QC</span>
           <div>
-            <strong>Queens Corner Cart</strong>
+            <strong>Cashecho</strong>
             <span>{DEMO ? "Demo business" : "Business workspace"}</span>
           </div>
         </div>
