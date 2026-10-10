@@ -668,6 +668,16 @@ export default function App() {
                 year: "numeric",
               })}
             </span>
+            {user && (
+              <button
+                type="button"
+                className="text-button topbar-signout"
+                onClick={handleSignOut}
+              >
+                <LogOut size={14} />
+                Sign out
+              </button>
+            )}
           </div>
         </header>
         <div className="content">
