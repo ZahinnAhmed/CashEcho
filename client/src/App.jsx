@@ -18,9 +18,11 @@ import {
   TriangleAlert,
   Leaf,
   LogOut,
+  FileText,
 } from "lucide-react";
 import {
   ComposedChart,
+  Area,
   Bar,
   Line,
   XAxis,
@@ -33,6 +35,10 @@ import {
 } from "recharts";
 import { api, DEMO, hasSession, getUser } from "./api.js";
 import GoogleSignIn from "./GoogleSignIn.jsx";
+import LenderSummary from "./LenderSummary.jsx";
+import ImportPanel from "./ImportPanel.jsx";
+import FixPanel from "./FixPanel.jsx";
+import AnswerCard from "./AnswerCard.jsx";
 import {
   categories,
   dateKey,
@@ -57,6 +63,7 @@ const tabs = [
   { id: "log", label: "Log money", icon: Mic },
   { id: "ledger", label: "Ledger", icon: BookOpen },
   { id: "wall", label: "Debt Wall", icon: ChartNoAxesCombined },
+  { id: "summary", label: "Lender summary", icon: FileText, realOnly: true },
 ];
 const blankTransaction = () => ({
   type: "expense",
@@ -74,6 +81,8 @@ const blankDebt = () => ({
   monthly_payment: "",
   rate_pct: 0,
   payment_day: 15,
+  payment_frequency: "monthly",
+  payment_weekday: 5,
   end_date: dateKey(addDays(new Date(), 365)),
   balloon_amount: 0,
   balloon_date: "",
@@ -206,6 +215,16 @@ function ChartTip({ active, payload }) {
       <p>Payments: {money(row.payments)}</p>
       <p>Ending cash: {money(row.projected_cash)}</p>
       <p>Lowest daily cash: {money(row.min_cash ?? row.projected_cash)}</p>
+      {row.band && (
+        <p>
+          Likely range: {money(row.band[0])} to {money(row.band[1])}
+        </p>
+      )}
+      {row.shortfall_prob != null && (
+        <p>
+          Chance of a shortfall by then: {Math.round(row.shortfall_prob * 100)}%
+        </p>
+      )}
       {row.shortfall && <b className="danger-text">Shortfall expected</b>}
     </div>
   );
@@ -262,7 +281,21 @@ function DebtForm({ onSave, onCancel, busy }) {
             onChange={update("balance")}
           />
         </Field>
-        <Field label="Monthly payment ($)">
+        {!DEMO && (
+          <Field label="How often is it paid?">
+            <select
+              value={value.payment_frequency}
+              onChange={update("payment_frequency")}
+            >
+              <option value="monthly">Once a month</option>
+              <option value="weekly">Once a week</option>
+              <option value="daily">Every business day (Mon to Fri)</option>
+            </select>
+          </Field>
+        )}
+        <Field
+          label={`${{ monthly: "Monthly", weekly: "Weekly", daily: "Daily" }[value.payment_frequency] || "Monthly"} payment ($)`}
+        >
           <input
             required
             type="number"
@@ -282,17 +315,41 @@ function DebtForm({ onSave, onCancel, busy }) {
             onChange={update("rate_pct")}
           />
         </Field>
-        <Field label="Payment day of month">
-          <input
-            required
-            type="number"
-            min="1"
-            max="31"
-            step="1"
-            value={value.payment_day}
-            onChange={update("payment_day")}
-          />
-        </Field>
+        {value.payment_frequency === "monthly" && (
+          <Field label="Payment day of month">
+            <input
+              required
+              type="number"
+              min="1"
+              max="31"
+              step="1"
+              value={value.payment_day}
+              onChange={update("payment_day")}
+            />
+          </Field>
+        )}
+        {value.payment_frequency === "weekly" && (
+          <Field label="Day of the week">
+            <select
+              value={value.payment_weekday}
+              onChange={update("payment_weekday")}
+            >
+              {[
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+              ].map((day, i) => (
+                <option key={day} value={i}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Loan end date">
           <input
             required
@@ -342,6 +399,8 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [signupForm, setSignupForm] = useState({ name: "", email: "", password: "" });
   const [authMode, setAuthMode] = useState("login");
+  const [summary, setSummary] = useState(null);
+  const [language, setLanguage] = useState({ language: "en", languages: [] });
   const [authBusy, setAuthBusy] = useState(false);
   const [tab, setTab] = useState("log"),
     [data, setData] = useState(null),
@@ -384,6 +443,36 @@ export default function App() {
     // Signed in earlier but the name was never saved in this browser: ask the server
     if (isLoggedIn && !DEMO && !user) api.me().then(setUser).catch(() => {});
   }, [isLoggedIn]);
+  // When the page changes, move focus to its heading so a screen reader starts reading the new page
+  const headingRef = useRef(null);
+  const firstTab = useRef(true);
+  useEffect(() => {
+    if (firstTab.current) {
+      firstTab.current = false;
+      return;
+    }
+    headingRef.current?.focus();
+  }, [tab]);
+  // The owner's voice language (what they speak, and what the app speaks back)
+  useEffect(() => {
+    if (isLoggedIn && !DEMO) api.getLanguage().then(setLanguage).catch(() => {});
+  }, [isLoggedIn]);
+  async function changeLanguage(code) {
+    const previous = language;
+    setLanguage({ ...language, language: code });
+    try {
+      await api.setLanguage(code, language.languages);
+    } catch (e) {
+      setLanguage(previous);
+      setError(e.message);
+    }
+  }
+  // The lender summary is loaded whenever its tab is opened, so the numbers are current
+  useEffect(() => {
+    if (tab !== "summary" || !isLoggedIn || DEMO) return;
+    setSummary(null);
+    api.summary().then(setSummary).catch((e) => setError(e.message));
+  }, [tab, isLoggedIn]);
   useEffect(() => {
     if (isLoggedIn) void load();
     return () => {
@@ -458,13 +547,55 @@ export default function App() {
       setBusy(false);
     }
   }
+  // What the assistant last said back (an answer or a question), and what it is waiting to hear
+  const [reply, setReply] = useState(null);
+  const [waitingFor, setWaitingFor] = useState(null);
+  const [incoming, setIncoming] = useState(null); // entries from a spoken catch-up, waiting for review
+  // Everything the owner says or types comes through here. A sale or expense goes on to the
+  // confirm card; a question is answered out loud from their own numbers.
   async function parse(textValue) {
+    if (!DEMO) {
+      // The assistant only waits for its answer for one turn; after that it is a fresh request
+      const pending = waitingFor;
+      setWaitingFor(null);
+      const result = await api.ask(textValue, pending);
+      if (result.type === "catchup") {
+        // A whole stretch said in one go ("this week we sold 3200 and spent 1900"): show the
+        // entries for a quick check before saving
+        const summary = await api.catchup(textValue);
+        setIncoming(summary.transactions);
+        setReply(null);
+        setWaitingFor(null);
+        setText("");
+        say("Here is what I heard. Please check it, then add it.").catch(() => {});
+        return;
+      }
+      if (result.type !== "log") {
+        setWaitingFor(result.pending || null);
+        setReply({ question: textValue, text: result.text, asking: result.type === "ask" });
+        setText("");
+        if (result.type === "ask") {
+          // Ask, then listen: no need to find the mic button
+          setPlaying(true);
+          speak(result.text, () => {
+            setPlaying(false);
+            void recorderRef.current.start();
+          }).catch(() => {});
+        } else say(result.text).catch(() => {});
+        return;
+      }
+      setWaitingFor(null);
+      setReply(null);
+    }
     setText(textValue); // keeps a spoken transcript editable if parsing fails
     const value = await api.parse(textValue);
     setDraft(validateTransaction(value));
     setManual(false);
   }
   const recorder = useRecorder(parse, setError);
+  // The latest recorder, for the callback that opens the mic after a spoken follow-up question
+  const recorderRef = useRef(recorder);
+  recorderRef.current = recorder;
   // Playback goes through lib/voiceClient.js so iPhone Safari allows it after a tap.
   function playAudio(source) {
     setPlaying(true);
@@ -473,6 +604,12 @@ export default function App() {
   function say(textValue) {
     setPlaying(true);
     return speak(textValue, () => setPlaying(false));
+  }
+  async function afterImport(count) {
+    unlockAudio();
+    await load();
+    notify(`Added ${count} ${count === 1 ? "entry" : "entries"} from your records.`);
+    say(`Added ${count} ${count === 1 ? "entry" : "entries"} to your ledger.`).catch(() => {});
   }
   async function save(e) {
     e.preventDefault();
@@ -513,8 +650,15 @@ export default function App() {
   const wall = data?.wall,
     shortfall = wall?.first_shortfall;
   const alertText = shortfall
-    ? `${shortfall.lender} has a ${money(shortfall.amount)} payment due ${prettyDate(shortfall.due_date)}. Based on your current cash and recent activity, you are projected to be ${money(shortfall.shortfall)} short. Review the payment schedule and your upcoming income.`
+    ? `${shortfall.lender} has a ${money(shortfall.amount)} payment due ${prettyDate(shortfall.due_date)}. Based on your current cash and recent activity, you are projected to be ${money(Math.round(shortfall.shortfall))} short. Review the payment schedule and your upcoming income.`
     : "Your projected cash covers the scheduled payments over the next 90 days. Keep logging transactions to update the forecast.";
+  // Get the spoken alert ready as soon as the Debt Wall opens (or the language changes), so
+  // tapping "Hear alert" does not wait for the translation and the voice
+  const alertPrefetch = useRef(null);
+  useEffect(() => {
+    if (tab !== "wall" || !isLoggedIn || DEMO || !data) return;
+    alertPrefetch.current = api.alert().catch(() => null);
+  }, [tab, isLoggedIn, language.language, data?.wall?.first_shortfall?.due_date]);
   async function playAlert() {
     unlockAudio();
     await run(async () => {
@@ -525,9 +669,9 @@ export default function App() {
       if (DEMO) await say(alertText);
       else {
         // If /api/alert is down, play the alert pre-rendered for the demo.
-        const result = await api
-          .alert()
-          .catch(() => ({ audio_url: "/demo/alert.mp3" }));
+        const result =
+          (await alertPrefetch.current) ??
+          (await api.alert().catch(() => ({ audio_url: "/demo/alert.mp3" })));
         const url = result.audio_url || result.audioUrl;
         const spoken = result.text || result.alert_text || alertText;
         if (url) await playAudio(url).catch(() => say(spoken));
@@ -677,23 +821,23 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main">
+        Skip to the main content
+      </a>
       <aside className="sidebar">
-        <a
+        <button
+          type="button"
           className="brand"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            setTab("log");
-          }}
+          onClick={() => setTab("log")}
         >
           <span className="brand-symbol">
             <Leaf size={24} />
           </span>
           Cashecho<span className="brand-dot">.</span>
-        </a>
+        </button>
         <p className="sidebar-label">YOUR BUSINESS, IN VIEW</p>
         <nav aria-label="Main navigation">
-          {tabs.map(({ id, label, icon: Icon }) => (
+          {tabs.filter((t) => !(DEMO && t.realOnly)).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className={`nav-item ${tab === id ? "active" : ""}`}
@@ -750,7 +894,7 @@ export default function App() {
           </button>
         </div>
       </aside>
-      <main>
+      <main id="main">
         <header className="topbar">
           <span>
             {DEMO && (
@@ -761,6 +905,22 @@ export default function App() {
             )}
           </span>
           <div className="top-actions">
+            {!DEMO && language.languages.length > 0 && (
+              <label className="language-picker">
+                <span>Voice language</span>
+                <select
+                  value={language.language}
+                  onChange={(e) => void changeLanguage(e.target.value)}
+                  aria-label="Voice language"
+                >
+                  {language.languages.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {DEMO && (
               <button
                 className="text-button"
@@ -796,21 +956,27 @@ export default function App() {
                   ? "LESS PAPERWORK. MORE POSSIBILITY."
                   : tab === "ledger"
                     ? "EVERY DOLLAR, ACCOUNTED FOR."
-                    : "LOOK AHEAD WITH CONFIDENCE."}
+                    : tab === "summary"
+                      ? "READY FOR YOUR LENDER."
+                      : "LOOK AHEAD WITH CONFIDENCE."}
               </p>
-              <h1>
+              <h1 ref={headingRef} tabIndex={-1}>
                 {tab === "log"
                   ? "Your money. In your words."
                   : tab === "ledger"
                     ? "The story behind your numbers."
-                    : "See the squeeze before it hits."}
+                    : tab === "summary"
+                      ? "Your business, on one page."
+                      : "See the squeeze before it hits."}
               </h1>
               <p>
                 {tab === "log"
                   ? "Say a sale or an expense. We’ll take care of the entry."
                   : tab === "ledger"
                     ? "A clear record of what comes in and what goes out."
-                    : "Your next 90 days of cash and loan payments, together."}
+                    : tab === "summary"
+                      ? "Revenue, cash flow and your debt schedule, ready to print."
+                      : "Your next 90 days of cash and loan payments, together."}
               </p>
             </div>
             {(tab === "wall" || tab === "ledger") && (
@@ -942,10 +1108,19 @@ export default function App() {
                       </strong>
                       <span>
                         {recorder.status === "recording"
-                          ? "Tap again when you’re done."
-                          : "“Paid $340 for flour at Restaurant Depot.”"}
+                          ? "It stops by itself when you pause, or tap to stop."
+                          : DEMO
+                            ? "“Paid $340 for flour at Restaurant Depot.”"
+                            : "Say a sale or expense, or ask “How much did we spend last week?”"}
                       </span>
                     </div>
+                    <p className="sr-only" role="status" aria-live="assertive">
+                      {{
+                        recording: "Listening. Speak now. It stops by itself when you pause.",
+                        starting: "Opening the microphone.",
+                        sending: "Working on what you said.",
+                      }[recorder.status] || ""}
+                    </p>
                     <VoiceSettings
                       recorder={recorder}
                       disabled={busy || !!draft}
@@ -974,7 +1149,7 @@ export default function App() {
                         id="spoken-text"
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="Received $650 in sales today"
+                        placeholder={DEMO ? "Received $650 in sales today" : "Received $650 in sales today, or: how much did we spend last week?"}
                         rows={2}
                         disabled={busy || recorder.status !== "idle"}
                       />
@@ -1006,6 +1181,24 @@ export default function App() {
                     </form>
                   </section>
                   <div className="log-right">
+                    {reply && (
+                      <AnswerCard
+                        reply={reply}
+                        onReplay={() => say(reply.text).catch(() => {})}
+                        onClose={() => {
+                          setReply(null);
+                          setWaitingFor(null);
+                        }}
+                      />
+                    )}
+                    {!DEMO && !draft && (
+                      <ImportPanel
+                        onImported={afterImport}
+                        onError={setError}
+                        incoming={incoming}
+                        onIncomingHandled={() => setIncoming(null)}
+                      />
+                    )}
                     {draft ? (
                       <form className="panel confirmation" onSubmit={save}>
                         <div className="section-head">
@@ -1165,6 +1358,9 @@ export default function App() {
                   </section>
                 </>
               )}
+              {tab === "summary" && !DEMO && (
+                summary ? <LenderSummary data={summary} /> : <p className="muted">Loading your summary…</p>
+              )}
               {tab === "wall" && (
                 <>
                   <section
@@ -1174,10 +1370,50 @@ export default function App() {
                     <div>
                       <h2>
                         {shortfall
-                          ? `${money(shortfall.shortfall)} projected shortfall`
+                          ? `${money(Math.round(shortfall.shortfall))} projected shortfall`
                           : "Scheduled payments covered"}
                       </h2>
                       <p>{alertText}</p>
+                      {wall.coverage?.ratio != null && (
+                        <p className="micro-copy">
+                          Each month your business generates about{" "}
+                          {money(wall.coverage.monthly_operating_cash)} before
+                          loan payments, against{" "}
+                          {money(wall.coverage.monthly_loan_payments)} of
+                          payments, a coverage of{" "}
+                          {wall.coverage.ratio.toFixed(2)}x.
+                        </p>
+                      )}
+                      {wall.history_needed && wall.payments.length > 0 && (
+                        <p className="micro-copy">
+                          Not enough history yet for a likely range (you have{" "}
+                          {wall.history_needed.days_logged}{" "}
+                          {wall.history_needed.days_logged === 1 ? "day" : "days"}{" "}
+                          with entries). It needs at least{" "}
+                          {wall.history_needed.daily_days} days with entries, or{" "}
+                          {wall.history_needed.weekly_days} weekly totals over a
+                          month. Until then we show the plain forecast and don’t
+                          guess a chance.
+                        </p>
+                      )}
+                      {wall.days_since_last_entry >= 7 && (
+                        <p className="micro-copy">
+                          Your last entry was {wall.days_since_last_entry} days
+                          ago, so this forecast may be out of date. Say this
+                          week’s totals to update it, for example “this week we
+                          sold 3,200 and spent 1,900 on supplies.”
+                        </p>
+                      )}
+                      {wall.uncertainty && (
+                        <p className="micro-copy">
+                          {wall.uncertainty.mode === "weekly"
+                            ? `We replayed the weeks you logged, ${wall.uncertainty.paths.toLocaleString()} different ways.`
+                            : `We replayed your last ${wall.uncertainty.history_days} days of activity ${wall.uncertainty.paths.toLocaleString()} different ways.`}{" "}
+                          {shortfall?.probability != null
+                            ? `By ${prettyDate(shortfall.due_date)}, cash is below zero in ${Math.round(shortfall.probability * 100)}% of them.`
+                            : `Cash drops below zero at some point in ${Math.round(wall.shortfall_probability * 100)}% of them.`}
+                        </p>
+                      )}
                     </div>
                     <button
                       className="button outline"
@@ -1188,6 +1424,11 @@ export default function App() {
                       {playing ? "Stop audio" : "Hear alert"}
                     </button>
                   </section>
+                  {!DEMO && (
+                    <FixPanel
+                      refreshKey={`${wall.shortfall_probability}|${wall.payments.length}|${wall.starting_cash}`}
+                    />
+                  )}
                   <section className="panel wall-panel">
                     <div className="section-head">
                       <div>
@@ -1206,12 +1447,22 @@ export default function App() {
                           <i className="legend-bar" />
                           Payments due
                         </span>
+                        {wall.uncertainty && (
+                          <span>
+                            <i className="legend-band" />
+                            Likely range
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div
                       className="chart-container"
                       role="img"
-                      aria-label="90-day cash forecast with scheduled payments and red shortfall weeks"
+                      aria-label={
+                        shortfall
+                          ? `90-day cash forecast. Cash is projected to go below zero around ${prettyDate(shortfall.due_date)}, when a ${money(shortfall.amount)} payment to ${shortfall.lender} is due, about ${money(Math.round(shortfall.shortfall))} short.${shortfall.probability != null ? ` The chance of that is about ${Math.round(shortfall.probability * 100)} percent.` : ""} The full numbers are in the table below the chart.`
+                          : "90-day cash forecast. Cash stays above zero for every scheduled payment. The full numbers are in the table below the chart."
+                      }
                     >
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart
@@ -1231,11 +1482,13 @@ export default function App() {
                             minTickGap={26}
                           />
                           <YAxis
-                            tickFormatter={(n) =>
-                              Math.abs(n) >= 1000
-                                ? `$${(n / 1000).toFixed(1)}k`
-                                : `$${n}`
-                            }
+                            tickFormatter={(n) => {
+                              const sign = n < 0 ? "-" : "";
+                              const abs = Math.abs(n);
+                              return abs >= 1000
+                                ? `${sign}$${(abs / 1000).toFixed(1)}k`
+                                : `${sign}$${abs}`;
+                            }}
                             tickLine={false}
                             axisLine={false}
                             tick={{ fill: "#727e75", fontSize: 11 }}
@@ -1262,6 +1515,18 @@ export default function App() {
                             stroke="#b86753"
                             strokeDasharray="4 4"
                           />
+                          {wall.uncertainty && (
+                            <Area
+                              isAnimationActive={false}
+                              dataKey="band"
+                              name="Likely range"
+                              type="linear"
+                              stroke="none"
+                              fill="#1c6551"
+                              fillOpacity={0.13}
+                              activeDot={false}
+                            />
+                          )}
                           <Bar
                             isAnimationActive={false}
                             dataKey="payments"
@@ -1314,6 +1579,7 @@ export default function App() {
                                   className={w.shortfall ? "danger-text" : ""}
                                 >
                                   {money(w.min_cash ?? w.projected_cash)}
+                                  {w.shortfall && <span className="sr-only"> (below zero)</span>}
                                 </td>
                               </tr>
                             ))}
@@ -1394,8 +1660,19 @@ export default function App() {
                           <strong>{money(d.balance)}</strong>
                           <span className="muted">outstanding balance</span>
                           <div className="loan-meta">
-                            <span>{money(d.monthly_payment)} / month</span>
-                            <span>Due day {d.payment_day}</span>
+                            <span>
+                              {money(d.monthly_payment)} /{" "}
+                              {{ weekly: "week", daily: "business day" }[
+                                d.payment_frequency
+                              ] || "month"}
+                            </span>
+                            <span>
+                              {d.payment_frequency === "daily"
+                                ? "Debited Mon to Fri"
+                                : d.payment_frequency === "weekly"
+                                  ? `Every ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.payment_weekday]}`
+                                  : `Due day ${d.payment_day}`}
+                            </span>
                           </div>
                           {Number(d.balloon_amount) > 0 && (
                             <p className="balloon">
@@ -1430,7 +1707,11 @@ export default function App() {
                                 <td>{prettyDate(p.due_date)}</td>
                                 <td>{p.lender}</td>
                                 <td>{money(p.amount)}</td>
-                                <td>{title(p.kind || "monthly")}</td>
+                                <td>
+                                  {p.kind === "daily"
+                                    ? `Daily, ${p.count} ${p.count === 1 ? "payment" : "payments"}`
+                                    : title(p.kind || "monthly")}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1450,7 +1731,7 @@ export default function App() {
         </div>
       </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {tabs.map(({ id, label, icon: Icon }) => (
+        {tabs.filter((t) => !(DEMO && t.realOnly)).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             className={tab === id ? "active" : ""}

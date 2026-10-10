@@ -81,8 +81,14 @@ CREATE TABLE debts (
   -- How much is still owed.
   balance         NUMERIC(12,2) NOT NULL,
 
-  -- The regular monthly payment; the debt wall needs it.
+  -- The amount of each regular payment (every month, week or business day, see below).
+  -- The name is from when every loan was monthly.
   monthly_payment NUMERIC(10,2) NOT NULL,
+
+  -- How often it is paid: 'monthly' on payment_day, 'weekly' on payment_weekday (0 = Sunday),
+  -- or 'daily' on every business day (a merchant cash advance is often paid like this)
+  payment_frequency TEXT NOT NULL DEFAULT 'monthly' CHECK (payment_frequency IN ('monthly', 'weekly', 'daily')),
+  payment_weekday   INT CHECK (payment_weekday BETWEEN 0 AND 6),
 
   -- Interest rate, like 6.50. Optional.
   rate_pct        NUMERIC(5,2),

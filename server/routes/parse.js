@@ -1,5 +1,5 @@
 const express = require('express');
-const { ai, MODEL } = require('../gemini');
+const { generate } = require('../gemini');
 
 const router = express.Router();
 
@@ -29,6 +29,7 @@ const todayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Ameri
 function buildPrompt(text) {
   const today = todayKey();
   return `You turn what a small food-cart owner says into one bookkeeping entry.
+The owner may speak or write in any language (Spanish, Chinese, Hindi, Arabic and so on). Understand it, and fill every field in English, using the exact allowed values below. Keep vendor and business names as spoken or written.
 Today's date is ${today}. Resolve words like "today" or "yesterday" to a YYYY-MM-DD date; use today if no day is said.
 type is "income" for money received (sales, tips) and "expense" for money paid out.
 category must be one of: ${CATEGORIES.join(', ')}.
@@ -73,12 +74,8 @@ function validate(t) {
   return null;
 }
 
-// Used on the second try, in case the main model is overloaded (Gemini sometimes answers 503)
-const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
-
-async function askGemini(text, model = MODEL) {
-  const response = await ai.models.generateContent({
-    model,
+async function askGemini(text) {
+  const response = await generate({
     contents: buildPrompt(text),
     config: { responseMimeType: 'application/json', responseSchema, temperature: 0 },
   });
@@ -94,7 +91,7 @@ router.post('/', async (req, res) => {
   let lastError = 'unknown error';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const parsed = await askGemini(text, attempt === 0 ? MODEL : FALLBACK_MODEL);
+      const parsed = await askGemini(text);
       if (parsed.is_transaction === false) {
         return res.status(422).json({ error: "I couldn't find a sale or payment in that. Try something like \"Paid $340 for flour\"." });
       }

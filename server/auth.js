@@ -32,11 +32,14 @@ async function saveUser({ email, name, picture }, { verified = false } = {}) {
 
 // Our own session token, handed out after Google confirms who the user is.
 // It carries the user's database id (uid), which every route uses to find their data.
+// A login lasts 30 days, and it renews itself while the app is in use (see requireAuth), so
+// regular users do not have to sign in again.
+const SESSION_DAYS = 30;
 const signSession = (user) =>
   jwt.sign(
     { uid: user.id, email: user.email, name: user.name, picture: user.picture },
     process.env.JWT_SECRET,
-    { expiresIn: '12h' }
+    { expiresIn: `${SESSION_DAYS}d` }
   );
 
 let devUser = null;
@@ -62,6 +65,9 @@ async function requireAuth(req, res, next) {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     if (!payload.uid) return res.status(401).json({ error: 'Please sign in again.' });
     req.user = { id: payload.uid, email: payload.email, name: payload.name, picture: payload.picture };
+    // More than half the time is used up: hand back a fresh token, which the app saves
+    const daysLeft = (payload.exp * 1000 - Date.now()) / 86400000;
+    if (daysLeft < SESSION_DAYS / 2) res.set('X-Refreshed-Token', signSession(req.user));
     next();
   } catch {
     res.status(401).json({ error: 'Your session expired. Please sign in again.' });

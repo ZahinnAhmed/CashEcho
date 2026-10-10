@@ -9,6 +9,8 @@ const toDebt = (row) => ({
   balance: Number(row.balance),
   monthly_payment: Number(row.monthly_payment),
   rate_pct: row.rate_pct === null ? null : Number(row.rate_pct),
+  payment_frequency: row.payment_frequency,
+  payment_weekday: row.payment_weekday,
   balloon_amount: row.balloon_amount === null ? null : Number(row.balloon_amount),
   // DATE columns come back as JS dates; the frontend expects "YYYY-MM-DD"
   end_date: row.end_date && toDateKey(row.end_date),
@@ -25,17 +27,20 @@ function buildPayments(debt) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const end = new Date(`${debt.end_date}T00:00:00`);
+  const MAX_ROWS = 400; // a daily loan running for years would otherwise make thousands of rows
 
-  if (debt.monthly_payment > 0) {
+  if (debt.monthly_payment > 0 && debt.payment_frequency === 'monthly') {
     for (let m = 0; ; m++) {
       const lastDay = new Date(today.getFullYear(), today.getMonth() + m + 1, 0).getDate();
-      const due = new Date(
-        today.getFullYear(),
-        today.getMonth() + m,
-        Math.min(debt.payment_day, lastDay)
-      );
+      const due = new Date(today.getFullYear(), today.getMonth() + m, Math.min(debt.payment_day, lastDay));
       if (due > end) break;
       if (due >= today) payments.push({ due_date: toDateKey(due), amount: debt.monthly_payment });
+    }
+  } else if (debt.monthly_payment > 0) {
+    // Daily means every business day (Monday to Friday); weekly means one chosen weekday
+    for (let d = new Date(today); d <= end && payments.length < MAX_ROWS; d.setDate(d.getDate() + 1)) {
+      const due = debt.payment_frequency === 'daily' ? d.getDay() >= 1 && d.getDay() <= 5 : d.getDay() === debt.payment_weekday;
+      if (due) payments.push({ due_date: toDateKey(d), amount: debt.monthly_payment });
     }
   }
 
@@ -60,6 +65,8 @@ router.post('/', async (req, res) => {
   const monthly_payment = Number(req.body.monthly_payment || 0);
   const balloon_amount = Number(req.body.balloon_amount || 0);
   const payment_day = Number(req.body.payment_day);
+  const payment_frequency = req.body.payment_frequency || 'monthly';
+  const payment_weekday = Number(req.body.payment_weekday);
 
   if (!lender) return res.status(400).json({ error: 'lender is required' });
   if (!(balance >= 0)) return res.status(400).json({ error: 'balance must be a number' });
@@ -69,8 +76,14 @@ router.post('/', async (req, res) => {
   if (monthly_payment === 0 && balloon_amount === 0) {
     return res.status(400).json({ error: 'Add a monthly payment or a balloon payment.' });
   }
-  if (!Number.isInteger(payment_day) || payment_day < 1 || payment_day > 31) {
+  if (!['monthly', 'weekly', 'daily'].includes(payment_frequency)) {
+    return res.status(400).json({ error: 'payment_frequency must be monthly, weekly or daily' });
+  }
+  if (payment_frequency === 'monthly' && (!Number.isInteger(payment_day) || payment_day < 1 || payment_day > 31)) {
     return res.status(400).json({ error: 'payment_day must be 1-31' });
+  }
+  if (payment_frequency === 'weekly' && (!Number.isInteger(payment_weekday) || payment_weekday < 0 || payment_weekday > 6)) {
+    return res.status(400).json({ error: 'choose the day of the week the payment is taken' });
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end_date || '')) {
     return res.status(400).json({ error: 'end_date must be YYYY-MM-DD' });
@@ -85,14 +98,18 @@ router.post('/', async (req, res) => {
     await client.query('BEGIN');
     const debtResult = await client.query(
       `INSERT INTO debts
-         (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date, user_id,
+          payment_frequency, payment_weekday)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
-        lender, kind || null, balance, monthly_payment, rate_pct || null, payment_day, end_date,
+        lender, kind || null, balance, monthly_payment, rate_pct || null,
+        payment_frequency === 'monthly' ? payment_day : null, end_date,
         balloon_amount > 0 ? balloon_amount : null,
         balloon_amount > 0 ? balloon_date : null,
         req.user.id,
+        payment_frequency,
+        payment_frequency === 'weekly' ? payment_weekday : null,
       ]
     );
     const debt = toDebt(debtResult.rows[0]);

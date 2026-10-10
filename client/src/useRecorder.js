@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { api, DEMO } from "./api.js";
+import { api, DEMO, getSpeechTag } from "./api.js";
 import {
   getUseFallback,
   setUseFallback,
   webSpeechAvailable,
 } from "./lib/voiceClient.js";
+// Recording stops by itself when the owner stops talking
+const SILENCE_MS = 3000; // quiet this long after they have spoken -> stop
+const NO_SPEECH_MS = 6000; // they never started talking -> stop
+
 export function useRecorder(onText, onError) {
   const [status, setStatus] = useState("idle");
   const [seconds, setSeconds] = useState(0);
@@ -12,6 +16,7 @@ export function useRecorder(onText, onError) {
     stream = useRef(null),
     recognition = useRef(null),
     timer = useRef(null),
+    silence = useRef(null),
     active = useRef(true),
     chunks = useRef([]);
   const [fallback, setFallbackState] = useState(
@@ -23,6 +28,11 @@ export function useRecorder(onText, onError) {
   }
   function clean() {
     clearInterval(timer.current);
+    if (silence.current) {
+      clearInterval(silence.current.id);
+      silence.current.ctx.close().catch(() => {});
+      silence.current = null;
+    }
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
   }
@@ -65,6 +75,40 @@ export function useRecorder(onText, onError) {
       setStatus("idle");
     }
   }
+  // Listens to the microphone level while recording. After the owner has spoken, three seconds
+  // of quiet ends the recording. The quiet level of the room is measured first, so background
+  // noise is not mistaken for speech.
+  function watchForSilence(media) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return; // no automatic stop; the owner taps stop
+    const ctx = new Ctx();
+    ctx.resume?.();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    ctx.createMediaStreamSource(media).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    const startedAt = Date.now();
+    let roomLevel = Infinity;
+    let heardSpeech = false;
+    let lastVoice = startedAt;
+    const id = setInterval(() => {
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const v of samples) sum += v * v;
+      const level = Math.sqrt(sum / samples.length);
+      const now = Date.now();
+      if (now - startedAt < 500) {
+        roomLevel = Math.min(roomLevel, level); // the quietest moment is the room's noise
+        return;
+      }
+      if (level > Math.max(0.015, roomLevel * 3)) {
+        heardSpeech = true;
+        lastVoice = now;
+      }
+      if (heardSpeech ? now - lastVoice >= SILENCE_MS : now - startedAt >= NO_SPEECH_MS) stop();
+    }, 100);
+    silence.current = { id, ctx };
+  }
   async function start() {
     if (status !== "idle") return;
     setSeconds(0);
@@ -78,7 +122,7 @@ export function useRecorder(onText, onError) {
       }
       const r = new Speech();
       recognition.current = r;
-      r.lang = "en-US";
+      r.lang = getSpeechTag(); // follows the owner's language choice
       r.interimResults = false;
       r.continuous = false;
       let result = "";
@@ -145,6 +189,7 @@ export function useRecorder(onText, onError) {
       rec.start();
       setStatus("recording");
       timer.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+      watchForSilence(media);
     } catch (e) {
       clean();
       if (active.current) {

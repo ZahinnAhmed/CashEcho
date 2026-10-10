@@ -46,6 +46,9 @@ const setUser = (user) => {
     /* storage unavailable */
   }
 };
+// Language tag for the browser's backup speech recognition (for example "es-US")
+let speechTag = "en-US";
+export const getSpeechTag = () => speechTag;
 export const hasSession = () => Boolean(getToken());
 async function request(path, options = {}) {
   const controller = new AbortController();
@@ -63,6 +66,9 @@ async function request(path, options = {}) {
       },
     });
     // The session expired or is invalid: forget it and go back to the login screen
+    // The server renews the login while the app is in use; keep the fresh one
+    const renewed = response.headers.get("X-Refreshed-Token");
+    if (renewed) setToken(renewed);
     if (response.status === 401 && getToken()) {
       setToken(null);
       setUser(null);
@@ -162,6 +168,26 @@ export const api = {
   alert: () => request("/alert"),
   speak: (text) => request("/speak", json({ text })),
   reset: () => demo.reset(),
+  summary: () => request("/summary"),
+  catchup: (text) => request("/catchup", json({ text })),
+  ask: (text, pending) => request("/ask", json({ text, pending })),
+  solve: (target) => request(`/solve?target=${target}`),
+  getLanguage: async () => {
+    const result = await request("/language");
+    speechTag = result.languages.find((l) => l.code === result.language)?.tag || "en-US";
+    return result;
+  },
+  setLanguage: async (language, languages) => {
+    await request("/language", { method: "PUT", body: JSON.stringify({ language }) });
+    speechTag = languages.find((l) => l.code === language)?.tag || "en-US";
+  },
+  importFiles: (files) => {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", f, f.name));
+    return request("/import", { method: "POST", body: form });
+  },
+  saveBulk: (transactions) =>
+    request("/transactions/bulk", json({ transactions })),
   authConfig: () => request("/auth/config"),
   me: async () => {
     const user = await request("/auth/me");

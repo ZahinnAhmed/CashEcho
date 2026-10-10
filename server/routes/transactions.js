@@ -13,7 +13,9 @@ const DATE_COLUMN = "to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS da
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT *, ${DATE_COLUMN} FROM transactions WHERE user_id = $1 ORDER BY occurred_at DESC`,
+      // The newest 500 entries: enough for the ledger screen, and the list cannot grow without limit.
+      // Weekly totals and the forecast read the daily_totals aggregate, so they cover everything.
+      `SELECT *, ${DATE_COLUMN} FROM transactions WHERE user_id = $1 ORDER BY occurred_at DESC LIMIT 500`,
       [req.user.id]
     );
     res.json(result.rows.map(toTransaction));
@@ -40,6 +42,80 @@ router.get('/weekly', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Save many entries at once (used after reviewing an import). All or nothing.
+router.post('/bulk', async (req, res) => {
+  const items = Array.isArray(req.body.transactions) ? req.body.transactions : [];
+  if (!items.length) return res.status(400).json({ error: 'No transactions to save.' });
+  if (items.length > 200) return res.status(400).json({ error: 'Too many at once (200 at most).' });
+
+  const categories = ['sales', 'supplies', 'rent', 'payroll', 'equipment', 'loan_payment', 'other'];
+  const methods = ['cash', 'card', 'other'];
+  for (const t of items) {
+    if (!['income', 'expense'].includes(t.type) || !(Number(t.amount) > 0) || !categories.includes(t.category) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(t.date || '') || (t.payment_method && !methods.includes(t.payment_method))) {
+      return res.status(400).json({ error: 'One of the entries is not valid. Please check them and try again.' });
+    }
+  }
+
+  // An entry that covers a range of days (a weekly total) is split evenly across those days, so the
+  // forecast, which works day by day, sees steady sales instead of one big lump. Cents left over
+  // go on the last day, so the pieces add up to exactly the total.
+  const rows = [];
+  for (const t of items) {
+    const from = t.date_from, to = t.date_to;
+    if (from && to && from < to) {
+      const start = new Date(`${from}T12:00:00Z`), end = new Date(`${to}T12:00:00Z`);
+      const days = Math.round((end - start) / 86400000) + 1;
+      if (!(days >= 2 && days <= 31) || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        return res.status(400).json({ error: 'A date range can cover 2 to 31 days.' });
+      }
+      const cents = Math.round(Number(t.amount) * 100);
+      const each = Math.floor(cents / days);
+      for (let i = 0; i < days; i++) {
+        const day = new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10);
+        rows.push({ ...t, date: day, amount: (i === days - 1 ? cents - each * (days - 1) : each) / 100,
+          note: `${t.note ? t.note + ' · ' : ''}part of a ${from} to ${to} total` });
+      }
+    } else {
+      rows.push(t);
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const t of rows) {
+      await client.query(
+        `INSERT INTO transactions
+           (user_id, occurred_at, type, amount, category, vendor, payment_method, note, raw_text)
+         VALUES ($1, ($2::date + interval '12 hours') AT TIME ZONE 'UTC', $3, $4, $5, $6, $7, $8, 'Imported from a photo or file')`,
+        [req.user.id, t.date, t.type, t.amount, t.category, t.vendor || null, t.payment_method || 'other', t.note || null]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[bulk] failed:', err.message);
+    return res.status(500).json({ error: 'Could not save those entries. Please try again.' });
+  } finally {
+    client.release();
+  }
+
+  // Bring the daily totals up to date for the days that changed
+  const dates = rows.map((t) => t.date).sort();
+  try {
+    await pool.query(
+      `CALL refresh_continuous_aggregate('daily_totals',
+         ($1::date)::timestamp AT TIME ZONE 'UTC',
+         (($2::date) + 1)::timestamp AT TIME ZONE 'UTC')`,
+      [dates[0], dates[dates.length - 1]]
+    );
+  } catch (err) {
+    console.error('[daily_totals] refresh failed:', err.message);
+  }
+  res.status(201).json({ saved: items.length, rows_written: rows.length });
 });
 
 router.post('/', async (req, res) => {
