@@ -1,4 +1,4 @@
-# Cartwise — Parsa's Hack Knight frontend
+# Cashecho — Parsa's Hack Knight frontend
 
 A mobile-first React frontend for Voice Ledger + Debt Wall. Includes P1–P8, Vercel configuration for P9, and a printable Debt Wall summary for P10. This is the `/client` portion only: no API keys, backend, database or sponsor accounts are included. The app is not deployed yet; domain registration and pointing require the team’s domain/hosting access.
 

@@ -5,7 +5,7 @@ import {
   validateTransaction,
   validateDebt,
 } from "./model.js";
-const KEY = "cartwise-demo-v1";
+const KEY = "cashecho-demo-v1";
 function seed() {
   const today = new Date(),
     transactions = [];

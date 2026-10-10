@@ -16,7 +16,6 @@ import {
   Download,
   Undo2,
   TriangleAlert,
-  Leaf,
   LogOut,
   FileText,
 } from "lucide-react";
@@ -89,6 +88,41 @@ const blankDebt = () => ({
 });
 const title = (s) =>
   s.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+
+function BrandFrog({ size = 24, className = "" }) {
+  return (
+    <svg
+      className={`brand-frog ${className}`.trim()}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <g>
+        <ellipse cx="12" cy="14" rx="8.6" ry="6.8" fill="#59b65e" />
+        <ellipse cx="12" cy="15.1" rx="6.5" ry="4.9" fill="#7cd57a" opacity="0.8" />
+        <circle cx="8.5" cy="8.5" r="1.25" fill="#ffffff" />
+        <circle cx="15.5" cy="8.5" r="1.25" fill="#ffffff" />
+        <circle cx="8.5" cy="9.2" r="0.55" fill="#1d3d2f" />
+        <circle cx="15.5" cy="9.2" r="0.55" fill="#1d3d2f" />
+        <path
+          d="M 9 11.2 Q 12 8.6 15 11.2"
+          fill="none"
+          stroke="#1d3d2f"
+          strokeWidth="0.9"
+          strokeLinecap="round"
+        />
+        <path
+          d="M 7 16.5 Q 12 18.5 17 16.5"
+          fill="none"
+          stroke="#1d3d2f"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+        />
+      </g>
+    </svg>
+  );
+}
 
 function Field({ label, children }) {
   return (
@@ -685,7 +719,7 @@ export default function App() {
         <div className="login-card">
           <div className="login-brand">
             <span className="brand-symbol login-icon">
-              <Leaf size={22} />
+              <BrandFrog size={22} />
             </span>
             <span>Cashecho</span>
           </div>
@@ -831,7 +865,7 @@ export default function App() {
           onClick={() => setTab("log")}
         >
           <span className="brand-symbol">
-            <Leaf size={24} />
+            <BrandFrog size={24} />
           </span>
           Cashecho<span className="brand-dot">.</span>
         </button>
@@ -852,7 +886,7 @@ export default function App() {
         </nav>
         <div className="sidebar-note">
           <span className="tiny-leaf">
-            <Leaf size={18} />
+            <BrandFrog size={18} />
           </span>
           <h3>Small cart. Big picture.</h3>
           <p>A little clarity for the business you’re building.</p>
@@ -1724,9 +1758,9 @@ export default function App() {
             </>
           )}
           <footer>
-            <Leaf size={14} />
+            <BrandFrog size={14} />
             <span>Made for the business behind the counter.</span>
-            <span>Cartwise · Hack Knight</span>
+            <span>Cashecho</span>
           </footer>
         </div>
       </main>
