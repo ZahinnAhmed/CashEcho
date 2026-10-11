@@ -2052,19 +2052,18 @@ select {
 
 /* Debt Wall: progress toward the full forecast for new owners */
 .forecast-progress {
-  margin: 14px 0 4px;
-  padding: 12px 14px;
+  margin: 12px 0 4px;
+  padding: 10px 14px;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid #dcebd2;
   border-radius: 16px;
-  max-width: 520px;
+  max-width: 440px;
 }
 .forecast-progress-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  font-size: 12px;
   color: #4d6a55;
 }
 .forecast-progress-head span {
@@ -2076,10 +2075,11 @@ select {
 .forecast-progress-head strong {
   font-size: 13px;
   color: #22593f;
+  white-space: nowrap;
 }
 .forecast-progress-bar {
-  height: 10px;
-  margin: 8px 0;
+  height: 8px;
+  margin: 7px 0 0;
   background: #e6efe0;
   border-radius: 999px;
   overflow: hidden;
@@ -2095,5 +2095,139 @@ select {
   font-size: 12px;
   line-height: 1.5;
   color: #56665a;
+  margin: 7px 0 0;
+}
+.forecast-progress p em {
+  font-style: normal;
+  color: #7a877d;
+}
+/* On a warning banner: one slim line, so the warning stays the focus */
+.forecast-progress.compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: #efdccb;
+}
+.forecast-progress.compact .forecast-progress-head {
+  flex-shrink: 0;
+}
+.forecast-progress.compact .forecast-progress-bar {
+  flex: 1;
   margin: 0;
+  min-width: 60px;
+}
+.cash-hint {
+  text-align: left;
+  margin-top: 8px;
+}
+
+/* Phones: a full-width print button, and the slim progress line wraps instead of squeezing */
+@media (max-width: 650px) {
+  .page-heading > .button {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+    font-size: 13px;
+  }
+  .lender-summary .section-head {
+    flex-wrap: wrap;
+  }
+  .lender-summary .section-head > .button {
+    width: 100%;
+    justify-content: center;
+  }
+  .forecast-progress.compact {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  .forecast-progress.compact .forecast-progress-bar {
+    flex-basis: 100%;
+  }
+}
+
+/* Printing, including from a phone: phones print the narrow layout, so undo the phone-only
+   sizes and hide everything that only makes sense on screen */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  :root,
+  body {
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .voice-language,
+  .topbar-signout,
+  .loan-actions,
+  .forecast-progress,
+  .cash-hint,
+  .fix-panel select,
+  .skip-link {
+    display: none !important;
+  }
+  .content {
+    padding: 0 !important;
+    max-width: none;
+  }
+  .page-heading {
+    flex-direction: row;
+    align-items: center;
+  }
+  h1 {
+    font-size: 24px;
+    max-width: none;
+  }
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .stat > span,
+  .stat small {
+    min-height: 0;
+    font-size: 10px;
+  }
+  .stat > span svg {
+    display: none;
+  }
+  .stat strong {
+    font-size: 20px;
+  }
+  .stat,
+  .panel {
+    box-shadow: none !important;
+    transform: none !important;
+    border-radius: 10px;
+  }
+  .alert-banner h2 {
+    font-size: 15px;
+  }
+  .alert-banner p {
+    font-size: 11px;
+  }
+  .alert-banner .button {
+    margin-left: 0;
+  }
+  .chart-container {
+    width: 100%;
+    height: 230px;
+  }
+  .loan-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  table {
+    font-size: 11px;
+  }
+  /* Phones scroll wide tables sideways; on paper they must show in full */
+  .table-wrap {
+    overflow: visible !important;
+  }
+  .summary-table {
+    display: table;
+    width: 100%;
+  }
 }

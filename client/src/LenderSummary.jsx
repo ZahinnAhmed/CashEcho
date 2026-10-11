@@ -1,4 +1,5 @@
 import { money, prettyDate } from "./model.js";
+import { printPage } from "./lib/print.js";
 
 const monthName = (month) =>
   new Date(`${month}-15T12:00:00`).toLocaleDateString("en-US", {
@@ -16,7 +17,7 @@ function coverageStatus(ratio) {
   return { text: "Not covered", tone: "risk" };
 }
 
-export default function LenderSummary({ data }) {
+export default function LenderSummary({ data, onNotice = () => {} }) {
   const coverage = coverageStatus(data.coverage.ratio);
   const shortfall = data.first_shortfall;
   const generated = new Date(data.generated_at).toLocaleDateString("en-US", {
@@ -39,7 +40,7 @@ export default function LenderSummary({ data }) {
           <button
             type="button"
             className="button outline no-print"
-            onClick={() => window.print()}
+            onClick={() => printPage(onNotice)}
           >
             Print or save as PDF
           </button>

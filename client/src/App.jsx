@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { cloneElement, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   Mic,
   Square,
@@ -54,6 +55,7 @@ import {
   validateDebt,
 } from "./model.js";
 import { useRecorder } from "./useRecorder.js";
+import { printPage } from "./lib/print.js";
 import VoiceSettings from "./components/VoiceSettings.jsx";
 import {
   confirmationLine,
@@ -263,35 +265,62 @@ function Entries({ items, onDelete, busy }) {
 }
 // How close a new owner is to the full forecast (the chance of running short needs about two
 // weeks of entries). Shown under the headline instead of a paragraph, and gone once it's full.
-function ForecastProgress({ logged, needed }) {
+function ForecastProgress({ logged, needed, compact }) {
   const left = Math.max(0, needed - logged);
   const pct = Math.min(100, Math.round((logged / needed) * 100));
   return (
-    <div className="forecast-progress">
+    <div className={`forecast-progress${compact ? " compact" : ""}`}>
       <div className="forecast-progress-head">
-        <span>Forecast accuracy</span>
+        <span>Unlock your risk score</span>
         <strong>
-          {logged} of {needed} days logged
+          {logged} of {needed} days
         </strong>
       </div>
       <div
         className="forecast-progress-bar"
         role="progressbar"
-        aria-label="Days logged toward the full forecast"
+        aria-label="Days logged toward your risk score"
         aria-valuemin={0}
         aria-valuemax={needed}
         aria-valuenow={logged}
       >
-        <span style={{ width: `${Math.max(pct, 4)}%` }} />
+        {/* Always a visible sliver, so day one doesn't look like nothing */}
+        <span style={{ width: `${Math.max(pct, 8)}%` }} />
       </div>
-      <p>
-        {logged < 7
-          ? "For now this is a rough guide, so check your cash on hand below the chart. "
-          : ""}Log {left} more{" "}
-        {left === 1 ? "day" : "days"} to see your chance of running short. Only
-        log once a week? A weekly total for 4 weeks works too.
-      </p>
+      {!compact && (
+        <p>
+          Log {left} more {left === 1 ? "day" : "days"} to see your chance of
+          running short. <em>Weekly totals work too.</em>
+        </p>
+      )}
     </div>
+  );
+}
+// The chart measures its width on screen and doesn't re-measure for paper, so a page printed
+// from a phone got a phone-sized chart. While printing, draw it at a fixed page width instead.
+const PRINT_CHART = { width: 680, height: 230 };
+function usePrinting() {
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    // flushSync: the browser lays out the page for printing right after this event
+    const before = () => flushSync(() => setPrinting(true));
+    const after = () => setPrinting(false);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
+  return printing;
+}
+function ChartBox({ printing, children }) {
+  return printing ? (
+    cloneElement(children, PRINT_CHART)
+  ) : (
+    <ResponsiveContainer width="100%" height="100%">
+      {children}
+    </ResponsiveContainer>
   );
 }
 function ChartTip({ active, payload }) {
@@ -560,6 +589,7 @@ export default function App() {
     [playing, setPlaying] = useState(false),
     [cashInput, setCashInput] = useState("");
   const toastTimer = useRef(null);
+  const printing = usePrinting();
   async function load() {
     setLoading(true);
     setError("");
@@ -1157,10 +1187,10 @@ export default function App() {
               <button
                 className="button outline"
                 disabled={!data}
-                onClick={() => window.print()}
+                onClick={() => printPage(notify)}
               >
                 <Download size={17} />
-                Print summary
+                Print or save PDF
               </button>
             )}
           </div>
@@ -1533,7 +1563,7 @@ export default function App() {
                 </>
               )}
               {tab === "summary" && !DEMO && (
-                summary ? <LenderSummary data={summary} /> : <p className="muted">Loading your summary…</p>
+                summary ? <LenderSummary data={summary} onNotice={notify} /> : <p className="muted">Loading your summary…</p>
               )}
               {tab === "wall" && (
                 <>
@@ -1552,6 +1582,8 @@ export default function App() {
                         <ForecastProgress
                           logged={wall.history_needed.days_logged}
                           needed={wall.history_needed.daily_days}
+                          // On a warning, keep it to one line so the warning stays in charge
+                          compact={Boolean(shortfall)}
                         />
                       )}
                       {wall.coverage?.ratio != null && (
@@ -1628,7 +1660,7 @@ export default function App() {
                           : "90-day cash forecast. Cash stays above zero for every scheduled payment. The full numbers are in the table below the chart."
                       }
                     >
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ChartBox printing={printing}>
                         <ComposedChart
                           data={wall.weeks}
                           margin={{ top: 20, right: 15, bottom: 8, left: 0 }}
@@ -1710,7 +1742,7 @@ export default function App() {
                             activeDot={{ r: 5 }}
                           />
                         </ComposedChart>
-                      </ResponsiveContainer>
+                      </ChartBox>
                     </div>
                     <details className="forecast-details">
                       <summary>How we worked this out</summary>
@@ -1788,6 +1820,13 @@ export default function App() {
                         Update my forecast
                       </button>
                     </form>
+                    {wall.early_days && !DEMO && (
+                      <p className="micro-copy cash-hint">
+                        New here? Enter all the cash you have right now, in
+                        the till and in the bank, so your forecast starts from
+                        the right amount.
+                      </p>
+                    )}
                   </section>
                   {loanForm && (
                     <DebtForm
