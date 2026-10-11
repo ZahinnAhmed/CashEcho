@@ -1482,6 +1482,16 @@ footer > span:last-child {
   color: #245e48;
 }
 
+/* The sidebar (and its sign-out button) is hidden on phones, so the top bar carries one */
+.topbar-signout {
+  display: none;
+}
+@media (max-width: 650px) {
+  .topbar-signout {
+    display: inline-flex;
+  }
+}
+
 img.avatar {
   object-fit: cover;
 }
