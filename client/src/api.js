@@ -164,7 +164,10 @@ export const api = {
           method: "DELETE",
         }),
   debt: (d) => (DEMO ? demo.debt(d) : request("/debts", json(d))),
-  cash: (v) => demo.cash(v),
+  cash: (v) =>
+    DEMO
+      ? demo.cash(v)
+      : request("/cash", { method: "PUT", body: JSON.stringify({ cash: v }) }),
   alert: () => request("/alert"),
   speak: (text) => request("/speak", json({ text })),
   reset: () => demo.reset(),

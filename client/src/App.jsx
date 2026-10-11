@@ -692,7 +692,13 @@ export default function App() {
   useEffect(() => {
     if (tab !== "wall" || !isLoggedIn || DEMO || !data) return;
     alertPrefetch.current = api.alert().catch(() => null);
-  }, [tab, isLoggedIn, language.language, data?.wall?.first_shortfall?.due_date]);
+  }, [
+    tab,
+    isLoggedIn,
+    language.language,
+    data?.wall?.first_shortfall?.due_date,
+    data?.wall?.starting_cash,
+  ]);
   async function playAlert() {
     unlockAudio();
     await run(async () => {
@@ -1428,6 +1434,14 @@ export default function App() {
                           {wall.coverage.ratio.toFixed(2)}x.
                         </p>
                       )}
+                      {wall.early_days && (
+                        <p className="micro-copy">
+                          This is based on only {wall.early_days}{" "}
+                          {wall.early_days === 1 ? "day" : "days"} of entries, so
+                          treat it as a rough guide. Set your cash on hand below
+                          the chart and keep logging to make it more accurate.
+                        </p>
+                      )}
                       {wall.history_needed && wall.payments.length > 0 && (
                         <p className="micro-copy">
                           Not enough history yet for a likely range (you have{" "}
@@ -1596,8 +1610,11 @@ export default function App() {
                       <summary>Forecast assumptions and weekly numbers</summary>
                       <p>
                         Average daily operating cash:{" "}
-                        {money(wall.average_daily_net)}. Uses the last 60
-                        calendar days including today, excludes historical loan
+                        {money(wall.average_daily_net)}. Uses the last{" "}
+                        {wall.average_days ?? 60} calendar{" "}
+                        {wall.average_days === 1 ? "day" : "days"} including
+                        today (since your first entry, up to 60), excludes
+                        historical loan
                         payments, and subtracts scheduled payments once. Assumes
                         steady activity; missing entries affect the forecast. No
                         bank connection. Demo loan schedules use monthly
@@ -1631,38 +1648,40 @@ export default function App() {
                         </table>
                       </div>
                     </details>
-                    {DEMO && (
-                      <form
-                        className="cash-form"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          void run(async () => {
-                            const n = Number(cashInput);
-                            if (!Number.isFinite(n) || n < 0)
-                              throw new Error(
-                                "Starting cash must be zero or greater.",
-                              );
-                            await api.cash(n);
-                            await load();
-                            notify("Starting cash updated.");
-                          });
-                        }}
+                    <form
+                      className="cash-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void run(async () => {
+                          const n = Number(cashInput);
+                          if (!Number.isFinite(n) || n < 0)
+                            throw new Error(
+                              "Cash on hand must be zero or greater.",
+                            );
+                          await api.cash(n);
+                          await load();
+                          notify("Cash on hand updated.");
+                        });
+                      }}
+                    >
+                      <Field
+                        label={
+                          DEMO ? "Starting cash ($)" : "Cash on hand today ($)"
+                        }
                       >
-                        <Field label="Starting cash ($)">
-                          <input
-                            required
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={cashInput}
-                            onChange={(e) => setCashInput(e.target.value)}
-                          />
-                        </Field>
-                        <button className="button outline" disabled={busy}>
-                          Update forecast
-                        </button>
-                      </form>
-                    )}
+                        <input
+                          required
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={cashInput}
+                          onChange={(e) => setCashInput(e.target.value)}
+                        />
+                      </Field>
+                      <button className="button outline" disabled={busy}>
+                        Update forecast
+                      </button>
+                    </form>
                   </section>
                   {loanForm && (
                     <DebtForm

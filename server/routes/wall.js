@@ -133,12 +133,17 @@ async function loadWallInputs(userId) {
     const key = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
     history.push({ date: key, net: byDate.get(key) ?? 0, logged: byDate.has(key) });
   }
+  // Average over the days since the first entry (at most 60). Dividing a new owner's first day
+  // by 60 would make a $90 day look like $1.50 a day.
+  const firstLogged = history.findIndex((d) => d.logged);
+  const averageDays = firstLogged === -1 ? 60 : 60 - firstLogged;
 
   return {
     userId,
     start,
     startingCash: openingCash + Number(net.rows[0].net),
-    averageDailyNet: Number(recent.rows[0].net) / 60,
+    averageDailyNet: Number(recent.rows[0].net) / averageDays,
+    averageDays,
     debts: debtRows.rows,
     history,
     daysWithActivity: byDate.size,
@@ -226,6 +231,9 @@ function forecast(inputs, changes = {}) {
   return {
     starting_cash: startingCash,
     average_daily_net: averageDailyNet,
+    average_days: inputs.averageDays,
+    // Under a week of entries the forecast is only a rough guide (the screen and alert say so)
+    early_days: inputs.daysWithActivity > 0 && inputs.daysWithActivity < 7 ? inputs.daysWithActivity : null,
     coverage: {
       monthly_operating_cash: monthlyOperatingCash,
       monthly_loan_payments: monthlyLoanPayments,

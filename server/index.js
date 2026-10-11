@@ -25,6 +25,7 @@ app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/debts', require('./routes/debts'));
 
 app.use('/api/wall', require('./routes/wall'));
+app.use('/api/cash', require('./routes/cash'));
 
 app.use('/api/parse', require('./routes/parse'));
 app.use('/api/alert', require('./routes/alert'));

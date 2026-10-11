@@ -82,6 +82,11 @@ router.get('/', async (req, res) => {
         text = text || templateText(wall);
         textCache.set(key, text);
       }
+      // A warning built from a few days of entries should say so
+      if (wall.early_days) {
+        const days = wall.early_days === 1 ? '1 day' : `${wall.early_days} days`;
+        text += ` This is based on only ${days} of entries, so treat it as a rough guide and check that your cash on hand is set.`;
+      }
     }
 
     // Speak it in the owner's language (numbers are checked in the translation); if speech
