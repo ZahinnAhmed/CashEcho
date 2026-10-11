@@ -50,9 +50,10 @@ const setUser = (user) => {
 let speechTag = "en-US";
 export const getSpeechTag = () => speechTag;
 export const hasSession = () => Boolean(getToken());
-async function request(path, options = {}) {
+// Most calls answer in seconds; a photo import passes a longer timeoutMs
+async function request(path, { timeoutMs = 30000, ...options } = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${base}/api${path}`, {
       ...options,
@@ -198,7 +199,8 @@ export const api = {
   importFiles: (files) => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f, f.name));
-    return request("/import", { method: "POST", body: form });
+    // The server allows up to 60 s for reading; leave room for the upload on mobile data
+    return request("/import", { method: "POST", body: form, timeoutMs: 75000 });
   },
   saveBulk: (transactions) =>
     request("/transactions/bulk", json({ transactions })),

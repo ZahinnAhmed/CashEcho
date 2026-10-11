@@ -154,7 +154,7 @@ router.post('/', (req, res) => {
           },
         ],
         config: { responseMimeType: 'application/json', responseSchema, temperature: 0 },
-      });
+      }, { fast: true, attemptMs: 30000, totalMs: 60000 }); // several pages can take a while
 
       const parsed = JSON.parse(response.text);
       const { rows, dropped } = clean(Array.isArray(parsed.transactions) ? parsed.transactions : []);

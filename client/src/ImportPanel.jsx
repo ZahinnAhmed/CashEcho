@@ -40,6 +40,14 @@ export default function ImportPanel({ onImported, onError, incoming, onIncomingH
   const [rows, setRows] = useState([]);
   const [info, setInfo] = useState({ files: 0, skipped: 0 });
   const [original, setOriginal] = useState(null); // the rows before combining, so it can be undone
+  const [slow, setSlow] = useState(false); // reading has taken longer than usual
+
+  // After 10 seconds of reading, tell the owner it's still working (the server may be waking up)
+  useEffect(() => {
+    if (stage !== "reading") return setSlow(false);
+    const timer = setTimeout(() => setSlow(true), 10000);
+    return () => clearTimeout(timer);
+  }, [stage]);
 
   // Entries that came from the owner's voice (a whole week said in one go) use the same review
   useEffect(() => {
@@ -311,7 +319,11 @@ export default function ImportPanel({ onImported, onError, incoming, onIncomingH
         </button>
       </div>
       {stage === "reading" && (
-        <p className="muted">Reading your records… this takes a few seconds.</p>
+        <p className="muted" role="status">
+          {slow
+            ? "Still reading… several pages, or a server that was asleep, can take up to a minute."
+            : "Reading your records… this usually takes a few seconds."}
+        </p>
       )}
     </section>
   );
