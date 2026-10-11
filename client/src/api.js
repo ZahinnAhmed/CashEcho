@@ -164,6 +164,17 @@ export const api = {
           method: "DELETE",
         }),
   debt: (d) => (DEMO ? demo.debt(d) : request("/debts", json(d))),
+  updateDebt: (id, d) =>
+    DEMO
+      ? demo.updateDebt(id, d)
+      : request(`/debts/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          body: JSON.stringify(d),
+        }),
+  removeDebt: (id) =>
+    DEMO
+      ? demo.removeDebt(id)
+      : request(`/debts/${encodeURIComponent(id)}`, { method: "DELETE" }),
   cash: (v) =>
     DEMO
       ? demo.cash(v)

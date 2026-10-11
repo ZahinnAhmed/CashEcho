@@ -160,6 +160,16 @@ export const demo = {
     write({ ...d, debts: [...d.debts, item] });
     return item;
   },
+  updateDebt: async (id, debt) => {
+    const item = { ...validateDebt(debt), id };
+    const d = readDemo();
+    write({ ...d, debts: d.debts.map((x) => (x.id === id ? item : x)) });
+    return item;
+  },
+  removeDebt: async (id) => {
+    const d = readDemo();
+    write({ ...d, debts: d.debts.filter((x) => x.id !== id) });
+  },
   cash: async (value) => {
     write({ ...readDemo(), starting_cash: value });
   },

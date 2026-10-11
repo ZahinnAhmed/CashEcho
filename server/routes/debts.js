@@ -59,74 +59,121 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
-  const { lender, kind, rate_pct, end_date, balloon_date } = req.body;
-  const balance = Number(req.body.balance);
-  const monthly_payment = Number(req.body.monthly_payment || 0);
-  const balloon_amount = Number(req.body.balloon_amount || 0);
-  const payment_day = Number(req.body.payment_day);
-  const payment_frequency = req.body.payment_frequency || 'monthly';
-  const payment_weekday = Number(req.body.payment_weekday);
+// Checks a loan from the form. Returns { error } or { values } in the column order used below.
+function readDebt(body) {
+  const { lender, kind, rate_pct, end_date, balloon_date } = body;
+  const balance = Number(body.balance);
+  const monthly_payment = Number(body.monthly_payment || 0);
+  const balloon_amount = Number(body.balloon_amount || 0);
+  const payment_day = Number(body.payment_day);
+  const payment_frequency = body.payment_frequency || 'monthly';
+  const payment_weekday = Number(body.payment_weekday);
 
-  if (!lender) return res.status(400).json({ error: 'lender is required' });
-  if (!(balance >= 0)) return res.status(400).json({ error: 'balance must be a number' });
-  if (!(monthly_payment >= 0) || !(balloon_amount >= 0)) {
-    return res.status(400).json({ error: 'payments must be zero or more' });
-  }
-  if (monthly_payment === 0 && balloon_amount === 0) {
-    return res.status(400).json({ error: 'Add a monthly payment or a balloon payment.' });
-  }
-  if (!['monthly', 'weekly', 'daily'].includes(payment_frequency)) {
-    return res.status(400).json({ error: 'payment_frequency must be monthly, weekly or daily' });
-  }
+  if (!lender || !String(lender).trim()) return { error: 'Enter who the loan is from.' };
+  if (!(balance >= 0)) return { error: 'Enter how much you still owe.' };
+  if (!(monthly_payment >= 0) || !(balloon_amount >= 0)) return { error: 'Payments must be zero or more.' };
+  if (monthly_payment === 0 && balloon_amount === 0) return { error: 'Add a regular payment or a final payment.' };
+  if (!['monthly', 'weekly', 'daily'].includes(payment_frequency)) return { error: 'Choose how often you pay.' };
   if (payment_frequency === 'monthly' && (!Number.isInteger(payment_day) || payment_day < 1 || payment_day > 31)) {
-    return res.status(400).json({ error: 'payment_day must be 1-31' });
+    return { error: 'The payment day must be between 1 and 31.' };
   }
   if (payment_frequency === 'weekly' && (!Number.isInteger(payment_weekday) || payment_weekday < 0 || payment_weekday > 6)) {
-    return res.status(400).json({ error: 'choose the day of the week the payment is taken' });
+    return { error: 'Choose the day of the week the payment is taken.' };
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(end_date || '')) {
-    return res.status(400).json({ error: 'end_date must be YYYY-MM-DD' });
-  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end_date || '')) return { error: 'Enter when the loan ends.' };
   if (balloon_amount > 0 && (!/^\d{4}-\d{2}-\d{2}$/.test(balloon_date || '') || balloon_date > end_date)) {
-    return res.status(400).json({ error: 'balloon_date must be valid and no later than end_date' });
+    return { error: 'The final payment date must be on or before the loan end date.' };
   }
+  return {
+    values: [
+      String(lender).trim(), kind || null, balance, monthly_payment, rate_pct || null,
+      payment_frequency === 'monthly' ? payment_day : null, end_date,
+      balloon_amount > 0 ? balloon_amount : null,
+      balloon_amount > 0 ? balloon_date : null,
+      payment_frequency,
+      payment_frequency === 'weekly' ? payment_weekday : null,
+    ],
+  };
+}
 
+// Replace a loan's stored payment rows with ones worked out from its current terms
+async function savePayments(client, debt) {
+  await client.query('DELETE FROM debt_payments WHERE debt_id = $1', [debt.id]);
+  for (const p of buildPayments(debt)) {
+    await client.query(
+      'INSERT INTO debt_payments (debt_id, due_date, amount) VALUES ($1, $2, $3)',
+      [debt.id, p.due_date, p.amount]
+    );
+  }
+}
+
+// Runs `work` in one database transaction: either everything is saved or nothing is
+async function inTransaction(res, work) {
   const client = await pool.connect();
   try {
-    // Save the loan and its payments together: either both are saved or neither
     await client.query('BEGIN');
-    const debtResult = await client.query(
-      `INSERT INTO debts
-         (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date, user_id,
-          payment_frequency, payment_weekday)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING *`,
-      [
-        lender, kind || null, balance, monthly_payment, rate_pct || null,
-        payment_frequency === 'monthly' ? payment_day : null, end_date,
-        balloon_amount > 0 ? balloon_amount : null,
-        balloon_amount > 0 ? balloon_date : null,
-        req.user.id,
-        payment_frequency,
-        payment_frequency === 'weekly' ? payment_weekday : null,
-      ]
-    );
-    const debt = toDebt(debtResult.rows[0]);
-
-    for (const p of buildPayments(debt)) {
-      await client.query(
-        'INSERT INTO debt_payments (debt_id, due_date, amount) VALUES ($1, $2, $3)',
-        [debt.id, p.due_date, p.amount]
-      );
-    }
+    await work(client);
     await client.query('COMMIT');
-    res.status(201).json(debt);
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+}
+
+router.post('/', async (req, res) => {
+  const { error, values } = readDebt(req.body);
+  if (error) return res.status(400).json({ error });
+
+  await inTransaction(res, async (client) => {
+    const result = await client.query(
+      `INSERT INTO debts
+         (lender, kind, balance, monthly_payment, rate_pct, payment_day, end_date, balloon_amount, balloon_date,
+          payment_frequency, payment_weekday, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING *`,
+      [...values, req.user.id]
+    );
+    const debt = toDebt(result.rows[0]);
+    await savePayments(client, debt);
+    res.status(201).json(debt);
+  });
+});
+
+// Change a loan's terms (only the owner's own loans)
+router.put('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(404).json({ error: 'Loan not found.' });
+  const { error, values } = readDebt(req.body);
+  if (error) return res.status(400).json({ error });
+
+  await inTransaction(res, async (client) => {
+    const result = await client.query(
+      `UPDATE debts SET
+         lender = $1, kind = $2, balance = $3, monthly_payment = $4, rate_pct = $5, payment_day = $6,
+         end_date = $7, balloon_amount = $8, balloon_date = $9, payment_frequency = $10, payment_weekday = $11
+       WHERE id = $12 AND user_id = $13
+       RETURNING *`,
+      [...values, id, req.user.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Loan not found.' });
+    const debt = toDebt(result.rows[0]);
+    await savePayments(client, debt);
+    res.json(debt);
+  });
+});
+
+// Remove a loan; its payment rows go with it (ON DELETE CASCADE)
+router.delete('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(404).json({ error: 'Loan not found.' });
+  try {
+    const result = await pool.query('DELETE FROM debts WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Loan not found.' });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

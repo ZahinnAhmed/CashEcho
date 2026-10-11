@@ -18,6 +18,8 @@ import {
   TriangleAlert,
   LogOut,
   FileText,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -86,6 +88,22 @@ const blankDebt = () => ({
   balloon_amount: 0,
   balloon_date: "",
 });
+// "15" -> "15th", for "Due on the 15th"
+const ordinal = (n) => {
+  const v = n % 100;
+  return `${n}${["th", "st", "nd", "rd"][(v - 20) % 10] || ["th", "st", "nd", "rd"][v] || "th"}`;
+};
+// Debt coverage in everyday words: how many times the month's earnings cover the loan payments
+function coverageText({ monthly_operating_cash: earn, monthly_loan_payments: pay, ratio }) {
+  const base = `In a typical month you bring in about ${money(earn)} after costs, and your loan payments add up to about ${money(pay)}.`;
+  if (ratio >= 1.25)
+    return `${base} That covers them ${ratio >= 10 ? "many" : ratio.toFixed(1)} times over, which is a healthy cushion.`;
+  if (ratio >= 1)
+    return `${base} That just covers them, with little room to spare.`;
+  if (ratio > 0)
+    return `${base} That only covers about ${Math.round(ratio * 100)}% of them, so you’d need other money to make up the rest.`;
+  return `${base} Right now your costs are higher than what you bring in, so the payments would have to come from savings.`;
+}
 const title = (s) =>
   s.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
 
@@ -246,27 +264,68 @@ function ChartTip({ active, payload }) {
   return (
     <div className="chart-tip">
       <strong>Week of {row.label}</strong>
-      <p>Payments: {money(row.payments)}</p>
-      <p>Ending cash: {money(row.projected_cash)}</p>
-      <p>Lowest daily cash: {money(row.min_cash ?? row.projected_cash)}</p>
+      <p>Loan payments: {money(row.payments)}</p>
+      <p>Cash at the end of the week: {money(row.projected_cash)}</p>
+      <p>Lowest point that week: {money(row.min_cash ?? row.projected_cash)}</p>
       {row.band && (
         <p>
-          Likely range: {money(row.band[0])} to {money(row.band[1])}
+          Most likely between {money(row.band[0])} and {money(row.band[1])}
         </p>
       )}
       {row.shortfall_prob != null && (
         <p>
-          Chance of a shortfall by then: {Math.round(row.shortfall_prob * 100)}%
+          Chance of running short by then: {Math.round(row.shortfall_prob * 100)}%
         </p>
       )}
-      {row.shortfall && <b className="danger-text">Shortfall expected</b>}
+      {row.shortfall && <b className="danger-text">You could run short this week</b>}
     </div>
   );
 }
-function DebtForm({ onSave, onCancel, busy }) {
-  const [value, setValue] = useState(blankDebt),
+// Gentle checks for numbers that are probably typed in the wrong box. They warn but don't block.
+function loanWarnings(value, averageDailyIncome) {
+  const payment = Number(value.monthly_payment),
+    balance = Number(value.balance),
+    warnings = [];
+  if (payment > 0 && balance > 0 && payment > balance)
+    warnings.push(
+      "Each payment is bigger than what you still owe. Did you mean to put this amount in “How much do you still owe?”",
+    );
+  if (payment > 0 && averageDailyIncome > 0) {
+    const days = payment / averageDailyIncome;
+    if (days > 50)
+      warnings.push(
+        `This one payment is about ${Math.round(days).toLocaleString()} days of your usual earnings. Double-check the amount.`,
+      );
+  }
+  return warnings;
+}
+function DebtForm({ initial, onSave, onCancel, busy, averageDailyIncome }) {
+  const editing = Boolean(initial);
+  const [value, setValue] = useState(() =>
+      initial
+        ? {
+            ...blankDebt(),
+            ...initial,
+            kind: initial.kind || "Other",
+            rate_pct: initial.rate_pct ?? 0,
+            payment_day: initial.payment_day ?? 15,
+            payment_weekday: initial.payment_weekday ?? 5,
+            balloon_amount: initial.balloon_amount ?? 0,
+            balloon_date: initial.balloon_date ?? "",
+          }
+        : blankDebt(),
+    ),
     [error, setError] = useState("");
   const update = (k) => (e) => setValue({ ...value, [k]: e.target.value });
+  const warnings = loanWarnings(value, averageDailyIncome);
+  // The form sits above the loan cards, so bring it into view when it opens
+  const formRef = useRef(null);
+  useEffect(() => {
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+  const every =
+    { weekly: "week", daily: "business day" }[value.payment_frequency] ||
+    "month";
   async function submit(e) {
     e.preventDefault();
     try {
@@ -277,9 +336,9 @@ function DebtForm({ onSave, onCancel, busy }) {
     }
   }
   return (
-    <form onSubmit={submit} className="panel debt-form">
+    <form ref={formRef} onSubmit={submit} className="panel debt-form">
       <div className="section-head">
-        <h2>Add a loan</h2>
+        <h2>{editing ? `Edit ${initial.lender}` : "Add a loan"}</h2>
         <button
           type="button"
           className="icon-button"
@@ -290,22 +349,29 @@ function DebtForm({ onSave, onCancel, busy }) {
         </button>
       </div>
       <div className="form-grid">
-        <Field label="Lender">
+        <Field label="Who is the loan from?">
           <input
             required
             value={value.lender}
             onChange={update("lender")}
-            placeholder="SBA business loan"
+            placeholder="For example, SBA or Kabbage"
           />
         </Field>
-        <Field label="Loan type">
+        <Field label="What kind of loan?">
           <select value={value.kind} onChange={update("kind")}>
-            {["SBA", "Equipment", "MCA", "Other"].map((c) => (
-              <option key={c}>{c}</option>
+            {[
+              ["SBA", "Government (SBA) loan"],
+              ["Equipment", "Equipment loan"],
+              ["MCA", "Cash advance"],
+              ["Other", "Something else"],
+            ].map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
             ))}
           </select>
         </Field>
-        <Field label="Outstanding balance ($)">
+        <Field label="How much do you still owe? ($)">
           <input
             required
             type="number"
@@ -313,23 +379,22 @@ function DebtForm({ onSave, onCancel, busy }) {
             step="0.01"
             value={value.balance}
             onChange={update("balance")}
+            placeholder="The total left to pay"
           />
         </Field>
         {!DEMO && (
-          <Field label="How often is it paid?">
+          <Field label="How often do you pay?">
             <select
               value={value.payment_frequency}
               onChange={update("payment_frequency")}
             >
               <option value="monthly">Once a month</option>
               <option value="weekly">Once a week</option>
-              <option value="daily">Every business day (Mon to Fri)</option>
+              <option value="daily">Every weekday (Mon to Fri)</option>
             </select>
           </Field>
         )}
-        <Field
-          label={`${{ monthly: "Monthly", weekly: "Weekly", daily: "Daily" }[value.payment_frequency] || "Monthly"} payment ($)`}
-        >
+        <Field label={`How much do you pay each ${every}? ($)`}>
           <input
             required
             type="number"
@@ -337,9 +402,10 @@ function DebtForm({ onSave, onCancel, busy }) {
             step="0.01"
             value={value.monthly_payment}
             onChange={update("monthly_payment")}
+            placeholder="One payment, not the total"
           />
         </Field>
-        <Field label="Annual rate (%)">
+        <Field label="Interest rate per year (%)">
           <input
             required
             type="number"
@@ -350,7 +416,7 @@ function DebtForm({ onSave, onCancel, busy }) {
           />
         </Field>
         {value.payment_frequency === "monthly" && (
-          <Field label="Payment day of month">
+          <Field label="Which day of the month is it due?">
             <input
               required
               type="number"
@@ -363,7 +429,7 @@ function DebtForm({ onSave, onCancel, busy }) {
           </Field>
         )}
         {value.payment_frequency === "weekly" && (
-          <Field label="Day of the week">
+          <Field label="Which day of the week?">
             <select
               value={value.payment_weekday}
               onChange={update("payment_weekday")}
@@ -384,7 +450,7 @@ function DebtForm({ onSave, onCancel, busy }) {
             </select>
           </Field>
         )}
-        <Field label="Loan end date">
+        <Field label="When does the loan end?">
           <input
             required
             type="date"
@@ -393,7 +459,7 @@ function DebtForm({ onSave, onCancel, busy }) {
             onChange={update("end_date")}
           />
         </Field>
-        <Field label="Balloon payment ($, optional)">
+        <Field label="Big final payment, if any ($)">
           <input
             type="number"
             min="0"
@@ -403,7 +469,7 @@ function DebtForm({ onSave, onCancel, busy }) {
           />
         </Field>
         {Number(value.balloon_amount) > 0 && (
-          <Field label="Balloon due date">
+          <Field label="When is the final payment due?">
             <input
               required
               type="date"
@@ -415,13 +481,19 @@ function DebtForm({ onSave, onCancel, busy }) {
           </Field>
         )}
       </div>
+      {warnings.map((w) => (
+        <p key={w} className="loan-warning" role="status">
+          <TriangleAlert size={16} />
+          {w}
+        </p>
+      ))}
       {error && (
         <p role="alert" className="danger-text">
           {error}
         </p>
       )}
       <button className="button primary" disabled={busy}>
-        {busy ? "Saving…" : "Save loan"}
+        {busy ? "Saving…" : editing ? "Save changes" : "Save loan"}
         <Check size={17} />
       </button>
     </form>
@@ -684,8 +756,8 @@ export default function App() {
   const wall = data?.wall,
     shortfall = wall?.first_shortfall;
   const alertText = shortfall
-    ? `${shortfall.lender} has a ${money(shortfall.amount)} payment due ${prettyDate(shortfall.due_date)}. Based on your current cash and recent activity, you are projected to be ${money(Math.round(shortfall.shortfall))} short. Review the payment schedule and your upcoming income.`
-    : "Your projected cash covers the scheduled payments over the next 90 days. Keep logging transactions to update the forecast.";
+    ? `Your ${shortfall.lender} payment of ${money(shortfall.amount)} is due ${prettyDate(shortfall.due_date)}. At your current pace, you’ll have about ${money(Math.round(shortfall.shortfall))} less than you need. There’s still time to plan: bring in a little extra, set some cash aside, or talk to your lender early.`
+    : "Good news: at your current pace, you’ll have enough for every loan payment in the next 90 days. Keep logging your sales and costs so this stays accurate.";
   // Get the spoken alert ready as soon as the Debt Wall opens (or the language changes), so
   // tapping "Hear alert" does not wait for the translation and the voice
   const alertPrefetch = useRef(null);
@@ -1089,7 +1161,7 @@ export default function App() {
                 </div>
                 <div className="stat emphasized">
                   <span>
-                    {tab === "wall" ? "Starting cash" : "This week’s net cash"}
+                    {tab === "wall" ? "Cash you have now" : "This week’s net cash"}
                     <Wallet size={16} />
                   </span>
                   <strong>
@@ -1101,7 +1173,7 @@ export default function App() {
                   </strong>
                   <small>
                     {tab === "wall"
-                      ? "Available at the start of the forecast"
+                      ? "What the forecast starts from"
                       : "Income minus expenses"}
                   </small>
                 </div>
@@ -1420,56 +1492,50 @@ export default function App() {
                     <div>
                       <h2>
                         {shortfall
-                          ? `${money(Math.round(shortfall.shortfall))} projected shortfall`
-                          : "Scheduled payments covered"}
+                          ? `You may be ${money(Math.round(shortfall.shortfall))} short on ${prettyDate(shortfall.due_date)}`
+                          : "You’re on track for your loan payments"}
                       </h2>
                       <p>{alertText}</p>
                       {wall.coverage?.ratio != null && (
                         <p className="micro-copy">
-                          Each month your business generates about{" "}
-                          {money(wall.coverage.monthly_operating_cash)} before
-                          loan payments, against{" "}
-                          {money(wall.coverage.monthly_loan_payments)} of
-                          payments, a coverage of{" "}
-                          {wall.coverage.ratio.toFixed(2)}x.
+                          {coverageText(wall.coverage)}
                         </p>
                       )}
                       {wall.early_days && (
                         <p className="micro-copy">
-                          This is based on only {wall.early_days}{" "}
-                          {wall.early_days === 1 ? "day" : "days"} of entries, so
-                          treat it as a rough guide. Set your cash on hand below
-                          the chart and keep logging to make it more accurate.
+                          You’ve logged {wall.early_days}{" "}
+                          {wall.early_days === 1 ? "day" : "days"} so far, so
+                          this is a rough guide. Enter your cash on hand below
+                          the chart and keep logging, and it will get sharper
+                          each day.
                         </p>
                       )}
                       {wall.history_needed && wall.payments.length > 0 && (
                         <p className="micro-copy">
-                          Not enough history yet for a likely range (you have{" "}
+                          Once you’ve logged about two weeks, we’ll also show
+                          how likely you are to run short. You have{" "}
                           {wall.history_needed.days_logged}{" "}
                           {wall.history_needed.days_logged === 1 ? "day" : "days"}{" "}
-                          with entries). It needs at least{" "}
-                          {wall.history_needed.daily_days} days with entries, or{" "}
-                          {wall.history_needed.weekly_days} weekly totals over a
-                          month. Until then we show the plain forecast and don’t
-                          guess a chance.
+                          so far.
                         </p>
                       )}
                       {wall.days_since_last_entry >= 7 && (
                         <p className="micro-copy">
-                          Your last entry was {wall.days_since_last_entry} days
-                          ago, so this forecast may be out of date. Say this
-                          week’s totals to update it, for example “this week we
-                          sold 3,200 and spent 1,900 on supplies.”
+                          You haven’t logged anything in{" "}
+                          {wall.days_since_last_entry} days, so this may be out
+                          of date. You can catch up in one go, for example:
+                          “this week we sold 3,200 and spent 1,900 on
+                          supplies.”
                         </p>
                       )}
                       {wall.uncertainty && (
                         <p className="micro-copy">
                           {wall.uncertainty.mode === "weekly"
-                            ? `We replayed the weeks you logged, ${wall.uncertainty.paths.toLocaleString()} different ways.`
-                            : `We replayed your last ${wall.uncertainty.history_days} days of activity ${wall.uncertainty.paths.toLocaleString()} different ways.`}{" "}
+                            ? `We played out ${wall.uncertainty.paths.toLocaleString()} possible futures using the weeks you’ve logged.`
+                            : `We played out ${wall.uncertainty.paths.toLocaleString()} possible futures using your last ${wall.uncertainty.history_days} days.`}{" "}
                           {shortfall?.probability != null
-                            ? `By ${prettyDate(shortfall.due_date)}, cash is below zero in ${Math.round(shortfall.probability * 100)}% of them.`
-                            : `Cash drops below zero at some point in ${Math.round(wall.shortfall_probability * 100)}% of them.`}
+                            ? `You ran short by ${prettyDate(shortfall.due_date)} in about ${Math.round(shortfall.probability * 100)} out of 100 of them.`
+                            : `You ran short at some point in about ${Math.round(wall.shortfall_probability * 100)} out of 100 of them.`}
                         </p>
                       )}
                     </div>
@@ -1490,10 +1556,10 @@ export default function App() {
                   <section className="panel wall-panel">
                     <div className="section-head">
                       <div>
-                        <h2>The next 90 days</h2>
+                        <h2>Your next 90 days</h2>
                         <p className="muted">
-                          Cash after scheduled payments. Red marks a week with
-                          negative cash.
+                          How much cash you’re likely to have after each loan
+                          payment. Red weeks are when you could run out.
                         </p>
                       </div>
                       <div className="chart-legend">
@@ -1607,27 +1673,27 @@ export default function App() {
                       </ResponsiveContainer>
                     </div>
                     <details className="forecast-details">
-                      <summary>Forecast assumptions and weekly numbers</summary>
+                      <summary>How we worked this out</summary>
                       <p>
-                        Average daily operating cash:{" "}
-                        {money(wall.average_daily_net)}. Uses the last{" "}
-                        {wall.average_days ?? 60} calendar{" "}
-                        {wall.average_days === 1 ? "day" : "days"} including
-                        today (since your first entry, up to 60), excludes
-                        historical loan
-                        payments, and subtracts scheduled payments once. Assumes
-                        steady activity; missing entries affect the forecast. No
-                        bank connection. Demo loan schedules use monthly
-                        payments, including the sample merchant cash advance.
+                        On an average day you bring in about{" "}
+                        {money(wall.average_daily_net)} after costs, based on
+                        the last {wall.average_days ?? 60}{" "}
+                        {wall.average_days === 1 ? "day" : "days"} (counting
+                        from your first entry, up to 60). We start from the cash
+                        you have now, add that each day, and take off each loan
+                        payment on its due date. Loan payments you’ve already
+                        made aren’t counted twice. Days you don’t log count as
+                        zero, so the more you log, the better this gets. We
+                        don’t connect to your bank.
                       </p>
                       <div className="table-wrap">
                         <table>
                           <thead>
                             <tr>
                               <th>Week</th>
-                              <th>Payments</th>
-                              <th>Ending cash</th>
-                              <th>Lowest cash</th>
+                              <th>Loan payments</th>
+                              <th>Cash at week’s end</th>
+                              <th>Lowest point</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1679,21 +1745,26 @@ export default function App() {
                         />
                       </Field>
                       <button className="button outline" disabled={busy}>
-                        Update forecast
+                        Update my forecast
                       </button>
                     </form>
                   </section>
                   {loanForm && (
                     <DebtForm
+                      // A fresh form for each loan, so switching loans resets the fields
+                      key={loanForm === true ? "new" : loanForm.id}
+                      initial={loanForm === true ? null : loanForm}
+                      averageDailyIncome={Math.max(0, wall.average_daily_net)}
                       busy={busy}
                       onCancel={() => setLoanForm(false)}
                       onSave={async (d) => {
                         setBusy(true);
                         try {
-                          await api.debt(d);
+                          if (loanForm === true) await api.debt(d);
+                          else await api.updateDebt(loanForm.id, d);
                           setLoanForm(false);
                           await load();
-                          notify("Loan added.");
+                          notify(loanForm === true ? "Loan added." : "Loan updated.");
                         } finally {
                           setBusy(false);
                         }
@@ -1721,7 +1792,7 @@ export default function App() {
                           <span className="pill">{d.kind || "Loan"}</span>
                           <h3>{d.lender}</h3>
                           <strong>{money(d.balance)}</strong>
-                          <span className="muted">outstanding balance</span>
+                          <span className="muted">left to pay</span>
                           <div className="loan-meta">
                             <span>
                               {money(d.monthly_payment)} /{" "}
@@ -1731,27 +1802,60 @@ export default function App() {
                             </span>
                             <span>
                               {d.payment_frequency === "daily"
-                                ? "Debited Mon to Fri"
+                                ? "Taken every weekday"
                                 : d.payment_frequency === "weekly"
                                   ? `Every ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.payment_weekday]}`
-                                  : `Due day ${d.payment_day}`}
+                                  : `Due on the ${ordinal(d.payment_day)}`}
                             </span>
                           </div>
                           {Number(d.balloon_amount) > 0 && (
                             <p className="balloon">
-                              {money(d.balloon_amount)} balloon ·{" "}
+                              {money(d.balloon_amount)} final payment ·{" "}
                               {prettyDate(d.balloon_date)}
                             </p>
                           )}
+                          <div className="loan-actions">
+                            <button
+                              type="button"
+                              className="text-button"
+                              disabled={busy}
+                              onClick={() => setLoanForm(d)}
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="text-button danger-text"
+                              disabled={busy}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Remove ${d.lender}? Its payments will come off your forecast.`,
+                                  )
+                                )
+                                  return;
+                                void run(async () => {
+                                  await api.removeDebt(d.id);
+                                  if (loanForm?.id === d.id) setLoanForm(false);
+                                  await load();
+                                  notify("Loan removed.");
+                                });
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              Remove
+                            </button>
+                          </div>
                         </article>
                       ))}
                     </div>
                   </section>
                   <section className="panel schedule">
-                    <h2>Upcoming payments</h2>
+                    <h2>Payments coming up</h2>
                     {!wall.payments?.length ? (
                       <p className="muted">
-                        No payments scheduled in this forecast.
+                        No loan payments in the next 90 days.
                       </p>
                     ) : (
                       <div className="table-wrap">

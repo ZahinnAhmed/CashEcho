@@ -1942,3 +1942,32 @@ select {
   height: 54px;
   border-radius: 17px;
 }
+/* Loan cards: edit and remove buttons, and the "does this look right?" note in the loan form */
+.loan-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.loan-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.loan-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #fff4e0;
+  color: #7a5a14;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+.loan-warning svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}

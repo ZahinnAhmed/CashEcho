@@ -117,7 +117,7 @@ test("rejects balloon after maturity and noninteger payment day", () => {
         balloon_amount: 100,
         balloon_date: "2027-02-01",
       }),
-    /Balloon date/,
+    /final payment date/,
   );
-  assert.throws(() => validateDebt({ ...debt, payment_day: 1.5 }), /1–31/);
+  assert.throws(() => validateDebt({ ...debt, payment_day: 1.5 }), /between 1 and 31/);
 });

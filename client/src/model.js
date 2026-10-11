@@ -41,20 +41,20 @@ export function validateTransaction(t) {
   return { ...t, amount: Math.round(Number(t.amount) * 100) / 100 };
 }
 export function validateDebt(d) {
-  if (!d.lender?.trim()) throw new Error("Enter the lender name.");
+  if (!d.lender?.trim()) throw new Error("Enter who the loan is from.");
   for (const k of ["balance", "monthly_payment", "rate_pct", "balloon_amount"])
     if (!Number.isFinite(Number(d[k])) || Number(d[k]) < 0)
-      throw new Error("Loan amounts and rate must be zero or greater.");
+      throw new Error("Amounts and the interest rate can’t be negative.");
   if (Number(d.monthly_payment) === 0 && Number(d.balloon_amount) === 0)
-    throw new Error("Add a monthly payment or a balloon payment.");
+    throw new Error("Add a regular payment or a final payment.");
   if (
     !Number.isInteger(Number(d.payment_day)) ||
     Number(d.payment_day) < 1 ||
     Number(d.payment_day) > 31
   )
-    throw new Error("Payment day must be 1–31.");
+    throw new Error("The payment day must be between 1 and 31.");
   if (!d.end_date || dateKey(parseDate(d.end_date)) !== d.end_date)
-    throw new Error("Enter a valid end date.");
+    throw new Error("Enter when the loan ends.");
   if (
     Number(d.balloon_amount) > 0 &&
     (!d.balloon_date ||
@@ -62,7 +62,7 @@ export function validateDebt(d) {
       d.balloon_date > d.end_date)
   )
     throw new Error(
-      "Balloon date must be valid and no later than the end date.",
+      "The final payment date must be on or before the loan end date.",
     );
   return {
     ...d,

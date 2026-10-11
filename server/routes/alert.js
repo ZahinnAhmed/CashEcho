@@ -21,29 +21,29 @@ function templateText(wall) {
     const what = s.kind === 'balloon' ? 'balloon payment' : 'payment';
     return (
       `Heads up. Your ${s.lender} ${what} of ${money(s.amount)} is due on ${prettyDate(s.due_date)}. ` +
-      `Based on your recent cash flow, you are projected to be about ${money(s.shortfall)} short` +
-      (pct(s) != null ? `, and the chance of a shortfall by then is about ${pct(s)} percent. ` : '. ') +
-      `It may be a good time to talk to your lender about refinancing or a new payment plan.`
+      `At your current pace, you could be about ${money(s.shortfall)} short` +
+      (pct(s) != null ? `, and there's about a ${pct(s)} percent chance of that happening. ` : '. ') +
+      `There's still time to plan. It may help to talk to your lender early about a new payment plan.`
     );
   }
   if (!wall.payments.length) {
-    return 'You have no loan payments coming up in the next 90 days. Add your loans to see how your cash lines up against them.';
+    return 'You have no loan payments coming up in the next 90 days. Add your loans and we will check that your cash can cover them.';
   }
-  return 'Good news. Your projected cash covers every scheduled loan payment for the next 90 days. Keep logging your sales and expenses to keep the forecast current.';
+  return 'Good news. At your current pace, you will have enough for every loan payment in the next 90 days. Keep logging your sales and costs so this stays accurate.';
 }
 
 // Gemini writes the alert from the shortfall numbers. The reply is only used if it states the
 // exact figures; otherwise we fall back to the template, so the spoken numbers are never wrong.
 async function geminiText(s) {
   const what = { balloon: 'balloon payment', daily: 'daily payment', weekly: 'weekly payment' }[s.kind] || 'monthly payment';
-  const prompt = `Write a short spoken alert for a small business owner, in plain, warm English. Exactly 2 or 3 sentences, no lists, no markdown.
+  const prompt = `Write a short spoken alert for a small business owner, in plain, warm, everyday English that anyone can understand (no finance jargon like refinancing, coverage or projected). Exactly 2 or 3 sentences, no lists, no markdown.
 Facts (use these exactly):
 - Lender: ${s.lender}
 - Type: ${what}
 - Amount due: ${money(s.amount)}
 - Due date: ${prettyDate(s.due_date)}
 - Projected shortfall: ${money(s.shortfall)}${pct(s) != null ? `\n- Chance of a shortfall by then: ${pct(s)} percent (say it as "${pct(s)} percent")` : ''}
-Say which payment, when it is due, and how short the owner is projected to be${pct(s) != null ? ', along with the chance of a shortfall' : ''}. Then gently suggest talking to the lender about refinancing or a new payment plan before the due date. Do not give financial advice, do not promise outcomes, and do not mention any other numbers.`;
+Say which payment, when it is due, and how short the owner is projected to be${pct(s) != null ? ', along with the chance of a shortfall' : ''}. Then gently suggest talking to the lender early about a new payment plan, before the due date. Do not give financial advice, do not promise outcomes, and do not mention any other numbers.`;
 
   const response = await generate({
     contents: prompt,
@@ -85,7 +85,7 @@ router.get('/', async (req, res) => {
       // A warning built from a few days of entries should say so
       if (wall.early_days) {
         const days = wall.early_days === 1 ? '1 day' : `${wall.early_days} days`;
-        text += ` This is based on only ${days} of entries, so treat it as a rough guide and check that your cash on hand is set.`;
+        text += ` This is based on only ${days} of entries, so treat it as a rough guide. Make sure you have entered the cash you have now.`;
       }
     }
 
