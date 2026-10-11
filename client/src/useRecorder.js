@@ -3,6 +3,7 @@ import { api, DEMO, getSpeechTag } from "./api.js";
 import {
   getUseFallback,
   setUseFallback,
+  showVoiceTools,
   webSpeechAvailable,
 } from "./lib/voiceClient.js";
 // Recording stops by itself when the owner stops talking
@@ -19,8 +20,12 @@ export function useRecorder(onText, onError) {
     silence = useRef(null),
     active = useRef(true),
     chunks = useRef([]);
+  // Owners always start on ElevenLabs (demo mode has no backend, so it starts on the browser's
+  // voice typing). Only the team's ?demo=1 switch is remembered between visits.
   const [fallback, setFallbackState] = useState(
-    () => webSpeechAvailable() && (getUseFallback() ?? DEMO),
+    () =>
+      webSpeechAvailable() &&
+      (showVoiceTools ? (getUseFallback() ?? DEMO) : DEMO),
   );
   function setFallback(on) {
     setUseFallback(on);
@@ -67,9 +72,10 @@ export function useRecorder(onText, onError) {
       await deliver(await api.transcribe(blob));
     } catch (e) {
       if (e.fallback && webSpeechAvailable()) {
-        setFallback(true);
+        // For this visit only: the next visit tries ElevenLabs again
+        setFallbackState(true);
         onError(
-          "ElevenLabs is unavailable, so backup voice input is now on. Tap the mic and say it again.",
+          "Voice is having trouble right now, so we’ve switched to your browser’s voice typing. Tap the mic and say it again.",
         );
       } else onError(e.message);
       setStatus("idle");
@@ -116,7 +122,7 @@ export function useRecorder(onText, onError) {
       const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!Speech) {
         onError(
-          "Browser speech recognition is unavailable. Turn off browser fallback to use ElevenLabs, or type your transaction.",
+          "Voice typing isn’t available in this browser. You can type it below instead.",
         );
         return;
       }
@@ -134,8 +140,12 @@ export function useRecorder(onText, onError) {
       };
       r.onerror = (e) => {
         failed = true;
+        // The browser's voice typing didn't work either, so go back to ElevenLabs for the next try
+        if (!DEMO && !showVoiceTools) setFallbackState(false);
         onError(
-          `Speech recognition: ${e.error}. You can type the transaction below.`,
+          e.error === "no-speech"
+            ? "I didn’t hear anything. Tap the mic and try again, or type it below."
+            : "Voice typing didn’t work that time. Tap the mic to try again, or type it below.",
         );
       };
       r.onend = () => {

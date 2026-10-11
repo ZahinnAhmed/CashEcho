@@ -119,6 +119,9 @@ export const webSpeechAvailable = () =>
   !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
 // The "Use backup voice input" switch, remembered per browser. null = never set.
+// The team's voice testing tools (the backup voice switch and demo clips) only show with ?demo=1
+export const showVoiceTools = new URLSearchParams(window.location.search).has("demo");
+
 export function getUseFallback() {
   try {
     const value = localStorage.getItem(FALLBACK_KEY);

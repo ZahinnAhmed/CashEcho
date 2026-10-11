@@ -1,10 +1,13 @@
 import { DEMO } from "../api.js";
-import { unlockAudio, webSpeechAvailable } from "../lib/voiceClient.js";
+import {
+  showVoiceTools,
+  unlockAudio,
+  webSpeechAvailable,
+} from "../lib/voiceClient.js";
 
 // Backup recordings in client/public/demo/, shown with ?demo=1. They go through the
 // real transcribe → parse → confirm path; only the microphone is skipped.
 const CLIPS = ["tx1", "tx2"];
-const showClips = new URLSearchParams(window.location.search).has("demo");
 
 async function loadClip(name) {
   for (const ext of ["webm", "mp4", "m4a"]) {
@@ -18,8 +21,10 @@ async function loadClip(name) {
   throw new Error(`Backup clip ${name} is missing from client/public/demo/.`);
 }
 
-// Voice input switch and the hidden backup clips (Labib). The switch is hidden
-// where the browser has no speech recognition, e.g. Firefox.
+// Voice input switch and the backup clips (Labib), for the team only: both show with ?demo=1.
+// Owners don't need the switch, because the app moves to the browser's voice typing by itself
+// when ElevenLabs is down. The switch is also hidden where the browser has no speech
+// recognition, e.g. Firefox.
 export default function VoiceSettings({ recorder, disabled, onError }) {
   const idle = recorder.status === "idle";
   async function sendClip(name) {
@@ -33,7 +38,7 @@ export default function VoiceSettings({ recorder, disabled, onError }) {
   }
   return (
     <>
-      {webSpeechAvailable() && (
+      {showVoiceTools && webSpeechAvailable() && (
         <label className="toggle">
           <input
             type="checkbox"
@@ -44,7 +49,7 @@ export default function VoiceSettings({ recorder, disabled, onError }) {
           Use backup voice input {DEMO && <span>(demo)</span>}
         </label>
       )}
-      {showClips && (
+      {showVoiceTools && (
         <div className="row-actions">
           {CLIPS.map((name, i) => (
             <button
