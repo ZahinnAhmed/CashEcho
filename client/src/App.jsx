@@ -20,6 +20,8 @@ import {
   FileText,
   Pencil,
   Trash2,
+  Languages,
+  ChevronDown,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -1026,19 +1028,28 @@ export default function App() {
           </span>
           <div className="top-actions">
             {!DEMO && language.languages.length > 0 && (
-              <label className="language-picker">
-                <span>Voice language</span>
-                <select
-                  value={language.language}
-                  onChange={(e) => void changeLanguage(e.target.value)}
-                  aria-label="Voice language"
-                >
-                  {language.languages.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
+              <label className="voice-language">
+                <Languages size={18} aria-hidden="true" />
+                <span className="voice-language-body">
+                  <small>Voice language</small>
+                  <strong>
+                    {language.languages.find((l) => l.code === language.language)
+                      ?.label ?? "English"}
+                  </strong>
+                  {/* Invisible, but covers the whole pill, so a tap anywhere opens the list */}
+                  <select
+                    value={language.language}
+                    onChange={(e) => void changeLanguage(e.target.value)}
+                    aria-label="Voice language"
+                  >
+                    {language.languages.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+                <ChevronDown size={16} aria-hidden="true" />
               </label>
             )}
             {DEMO && (

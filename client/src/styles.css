@@ -1971,3 +1971,81 @@ select {
   flex-shrink: 0;
   margin-top: 2px;
 }
+
+/* Voice language picker in the top bar: a clear green pill, so owners can find it */
+.voice-language {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 12px;
+  background: #e6f4dd;
+  border: 1.5px solid #c6e3b7;
+  border-radius: 999px;
+  color: #22593f;
+  cursor: pointer;
+  transition:
+    background 0.16s,
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+.voice-language:hover {
+  background: #dcefd0;
+  border-color: #9fd08a;
+}
+.voice-language:focus-within {
+  outline: 3px solid #88af87;
+  outline-offset: 2px;
+}
+.voice-language > svg {
+  flex-shrink: 0;
+}
+.voice-language-body {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.voice-language-body small {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #4d7a5c;
+}
+.voice-language-body strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e4d36;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The real select sits invisibly over the whole pill, so a tap anywhere opens it */
+.voice-language select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* stops iPhones zooming in when it opens */
+}
+@media (max-width: 700px) {
+  .voice-language {
+    padding: 6px 10px;
+    gap: 7px;
+  }
+  .voice-language-body small {
+    display: none;
+  }
+  .voice-language-body strong {
+    font-size: 13px;
+    max-width: 130px;
+  }
+}
+@media print {
+  .voice-language {
+    display: none !important;
+  }
+}
