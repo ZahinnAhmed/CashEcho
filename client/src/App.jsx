@@ -841,6 +841,7 @@ export default function App() {
                 <span>Email</span>
                 <input
                   type="email"
+                  autoComplete="username"
                   value={loginForm.email}
                   onChange={(event) =>
                     setLoginForm({ ...loginForm, email: event.target.value })
@@ -852,6 +853,7 @@ export default function App() {
                 <span>Password</span>
                 <input
                   type="password"
+                  autoComplete="current-password"
                   value={loginForm.password}
                   onChange={(event) =>
                     setLoginForm({ ...loginForm, password: event.target.value })
@@ -874,6 +876,7 @@ export default function App() {
                 <span>Full name</span>
                 <input
                   type="text"
+                  autoComplete="name"
                   value={signupForm.name}
                   onChange={(event) =>
                     setSignupForm({ ...signupForm, name: event.target.value })
@@ -885,6 +888,7 @@ export default function App() {
                 <span>Email</span>
                 <input
                   type="email"
+                  autoComplete="username"
                   value={signupForm.email}
                   onChange={(event) =>
                     setSignupForm({ ...signupForm, email: event.target.value })
@@ -896,6 +900,7 @@ export default function App() {
                 <span>Password</span>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={signupForm.password}
                   onChange={(event) =>
                     setSignupForm({
