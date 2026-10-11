@@ -229,7 +229,7 @@ function forecast(inputs, changes = {}) {
   const monthlyOperatingCash = averageDailyNet * 30;
 
   return {
-    starting_cash: startingCash,
+    starting_cash: Math.round(startingCash * 100) / 100, // sums of decimals leave tails like .4400000000005
     average_daily_net: averageDailyNet,
     average_days: inputs.averageDays,
     // Under a week of entries the forecast is only a rough guide (the screen and alert say so)

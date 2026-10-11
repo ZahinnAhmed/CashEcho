@@ -45,6 +45,7 @@ import {
   dateKey,
   addDays,
   money,
+  wholeMoney,
   prettyDate,
   weeklyTotals,
   validateTransaction,
@@ -269,7 +270,7 @@ function ChartTip({ active, payload }) {
       <p>Lowest point that week: {money(row.min_cash ?? row.projected_cash)}</p>
       {row.band && (
         <p>
-          Most likely between {money(row.band[0])} and {money(row.band[1])}
+          Most likely between {wholeMoney(row.band[0])} and {wholeMoney(row.band[1])}
         </p>
       )}
       {row.shortfall_prob != null && (
@@ -538,7 +539,9 @@ export default function App() {
           "Unexpected API response. Check the response shapes in README.md.",
         );
       setData(result);
-      setCashInput(String(result.starting_cash));
+      setCashInput(
+        String(Math.round((Number(result.starting_cash) || 0) * 100) / 100),
+      );
     } catch (e) {
       setError(e.message);
     } finally {
