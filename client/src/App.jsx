@@ -261,6 +261,39 @@ function Entries({ items, onDelete, busy }) {
     </div>
   );
 }
+// How close a new owner is to the full forecast (the chance of running short needs about two
+// weeks of entries). Shown under the headline instead of a paragraph, and gone once it's full.
+function ForecastProgress({ logged, needed }) {
+  const left = Math.max(0, needed - logged);
+  const pct = Math.min(100, Math.round((logged / needed) * 100));
+  return (
+    <div className="forecast-progress">
+      <div className="forecast-progress-head">
+        <span>Forecast accuracy</span>
+        <strong>
+          {logged} of {needed} days logged
+        </strong>
+      </div>
+      <div
+        className="forecast-progress-bar"
+        role="progressbar"
+        aria-label="Days logged toward the full forecast"
+        aria-valuemin={0}
+        aria-valuemax={needed}
+        aria-valuenow={logged}
+      >
+        <span style={{ width: `${Math.max(pct, 4)}%` }} />
+      </div>
+      <p>
+        {logged < 7
+          ? "For now this is a rough guide, so check your cash on hand below the chart. "
+          : ""}Log {left} more{" "}
+        {left === 1 ? "day" : "days"} to see your chance of running short. Only
+        log once a week? A weekly total for 4 weeks works too.
+      </p>
+    </div>
+  );
+}
 function ChartTip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
@@ -1515,27 +1548,15 @@ export default function App() {
                           : "You’re on track for your loan payments"}
                       </h2>
                       <p>{alertText}</p>
+                      {wall.history_needed && wall.payments.length > 0 && (
+                        <ForecastProgress
+                          logged={wall.history_needed.days_logged}
+                          needed={wall.history_needed.daily_days}
+                        />
+                      )}
                       {wall.coverage?.ratio != null && (
                         <p className="micro-copy">
                           {coverageText(wall.coverage)}
-                        </p>
-                      )}
-                      {wall.early_days && (
-                        <p className="micro-copy">
-                          You’ve logged {wall.early_days}{" "}
-                          {wall.early_days === 1 ? "day" : "days"} so far, so
-                          this is a rough guide. Enter your cash on hand below
-                          the chart and keep logging, and it will get sharper
-                          each day.
-                        </p>
-                      )}
-                      {wall.history_needed && wall.payments.length > 0 && (
-                        <p className="micro-copy">
-                          Once you’ve logged about two weeks, we’ll also show
-                          how likely you are to run short. You have{" "}
-                          {wall.history_needed.days_logged}{" "}
-                          {wall.history_needed.days_logged === 1 ? "day" : "days"}{" "}
-                          so far.
                         </p>
                       )}
                       {wall.days_since_last_entry >= 7 && (

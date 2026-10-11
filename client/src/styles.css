@@ -2049,3 +2049,51 @@ select {
     display: none !important;
   }
 }
+
+/* Debt Wall: progress toward the full forecast for new owners */
+.forecast-progress {
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #dcebd2;
+  border-radius: 16px;
+  max-width: 520px;
+}
+.forecast-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  color: #4d6a55;
+}
+.forecast-progress-head span {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.forecast-progress-head strong {
+  font-size: 13px;
+  color: #22593f;
+}
+.forecast-progress-bar {
+  height: 10px;
+  margin: 8px 0;
+  background: #e6efe0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.forecast-progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7cc576, #2d7a55);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.forecast-progress p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #56665a;
+  margin: 0;
+}
