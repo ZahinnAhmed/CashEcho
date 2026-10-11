@@ -719,7 +719,7 @@ export default function App() {
         <div className="login-card">
           <div className="login-brand">
             <span className="brand-symbol login-icon">
-              <BrandFrog size={22} />
+              <BrandFrog size={50} />
             </span>
             <span>Cashecho</span>
           </div>
@@ -865,7 +865,7 @@ export default function App() {
           onClick={() => setTab("log")}
         >
           <span className="brand-symbol">
-            <BrandFrog size={24} />
+            <BrandFrog size={46} />
           </span>
           Cashecho<span className="brand-dot">.</span>
         </button>
@@ -1758,7 +1758,6 @@ export default function App() {
             </>
           )}
           <footer>
-            <BrandFrog size={14} />
             <span>Made for the business behind the counter.</span>
             <span>Cashecho</span>
           </footer>

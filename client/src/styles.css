@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @theme {
-  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+  --font-sans: "Nunito", "Inter", "Segoe UI", Arial, sans-serif;
+  --font-display: "Fredoka", "Nunito", "Segoe UI", Arial, sans-serif;
 }
 :root {
   font-family: var(--font-sans);
@@ -263,10 +264,10 @@ a {
   place-items: center;
   transform: rotate(-5deg);
 }
+/* Sized by its width/height attributes, never stretched to fill its parent */
 .brand-frog {
   display: block;
-  width: 100%;
-  height: 100%;
+  flex-shrink: 0;
 }
 .brand-dot {
   color: #5c7045;
@@ -309,9 +310,9 @@ a {
   background: #3d7153;
   margin-left: auto;
 }
+/* Copy from the old left sidebar; there's no room for it in the top bar */
 .sidebar-note {
-  margin-top: auto;
-  margin-bottom: 28px;
+  display: none;
   background: #f5f7ec;
   border-radius: 14px;
   padding: 19px 17px;
@@ -331,8 +332,6 @@ a {
   line-height: 1.7;
 }
 .business {
-  border-top: 1px solid #e8ece5;
-  padding-top: 20px;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -1003,7 +1002,7 @@ footer > span:last-child {
 .toast {
   position: fixed;
   bottom: 25px;
-  left: calc(50% + 100px);
+  left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -1074,14 +1073,10 @@ footer > span:last-child {
 }
 @media (max-width: 1150px) {
   .sidebar {
-    width: 210px;
-    padding: 30px 17px;
+    padding: 16px 20px;
   }
   .brand {
     font-size: 27px;
-  }
-  main {
-    margin-left: 210px;
   }
   .content {
     padding: 30px;
@@ -1110,8 +1105,7 @@ footer > span:last-child {
 }
 @media (max-width: 900px) {
   .sidebar {
-    width: 180px;
-    padding: 28px 13px;
+    padding: 14px 16px;
   }
   .brand {
     font-size: 25px;
@@ -1130,9 +1124,6 @@ footer > span:last-child {
   }
   .business strong {
     font-size: 10px;
-  }
-  main {
-    margin-left: 180px;
   }
   .content {
     padding: 26px;
@@ -1181,7 +1172,7 @@ footer > span:last-child {
     margin-left: 42px;
   }
   .toast {
-    left: calc(50% + 80px);
+    left: 50%;
   }
 }
 @media (max-width: 650px) {
@@ -1636,6 +1627,7 @@ img.avatar {
   gap: 8px;
   font-size: 12px;
   color: #626c65;
+  white-space: nowrap;
 }
 .language-picker select {
   font-size: 12px;
@@ -1744,4 +1736,199 @@ h1:focus {
 .import-period small {
   color: #5f6a5b;
   font-size: 11px;
+}
+
+/* Cuter look: rounded type, soft pastel cards, pill buttons and a bobbing frog */
+:root {
+  background:
+    radial-gradient(circle at 12% 0%, #eaf6df 0, transparent 38%),
+    radial-gradient(circle at 95% 30%, #fdf1e4 0, transparent 32%),
+    #f7f9f2;
+}
+body {
+  background: transparent;
+}
+h1,
+.forecast-card h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.5px;
+}
+h2,
+.brand,
+.login-brand {
+  font-family: var(--font-display);
+}
+.brand {
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+.brand-dot {
+  margin-left: -6px;
+  color: #7cc576;
+}
+.brand-symbol {
+  background: #e6f5dc;
+  border-radius: 14px;
+  box-shadow: 0 4px 10px rgba(89, 182, 94, 0.25);
+}
+.brand-symbol .brand-frog,
+.login-icon .brand-frog {
+  animation: frog-bob 3.2s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+.brand:hover .brand-frog {
+  animation: frog-hop 0.6s ease-in-out;
+}
+@keyframes frog-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(-3deg);
+  }
+}
+@keyframes frog-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  40% {
+    transform: translateY(-5px) scale(1.08, 0.94);
+  }
+  70% {
+    transform: translateY(0) scale(0.96, 1.05);
+  }
+}
+.sidebar {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom-color: #e6efdc;
+}
+.nav-item {
+  border-radius: 999px;
+  font-weight: 600;
+}
+.nav-item:hover {
+  background: #f2f8ec;
+  color: #2f6b4a;
+}
+.nav-item.active {
+  background: #dff1d6;
+  color: #22593f;
+  box-shadow: inset 0 0 0 1px #cfe8c3;
+}
+.nav-dot {
+  background: #59b65e;
+}
+.avatar {
+  background: #ffe2cf;
+  color: #a04a2a;
+}
+.stat,
+.panel {
+  border-radius: 22px;
+  border-color: #e7eedf;
+  box-shadow: 0 6px 18px rgba(52, 92, 60, 0.06);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(52, 92, 60, 0.1);
+}
+.stats > .stat:nth-child(1) {
+  background: linear-gradient(160deg, #f0faea 0%, #ffffff 70%);
+}
+.stats > .stat:nth-child(2) {
+  background: linear-gradient(160deg, #fff3ea 0%, #ffffff 70%);
+}
+.stat.emphasized {
+  background: linear-gradient(160deg, #e3f4d8 0%, #f3f9ec 80%);
+  border-color: #d6ebc9;
+}
+.stat strong {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+.stat > span svg {
+  background: #fff;
+  border-radius: 999px;
+  padding: 5px;
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 2px 6px rgba(52, 92, 60, 0.1);
+}
+.button,
+.pill,
+.text-button {
+  border-radius: 999px;
+}
+.button {
+  font-weight: 700;
+}
+.primary {
+  background: #2d7a55;
+  box-shadow: 0 4px 12px rgba(45, 122, 85, 0.25);
+}
+.primary:hover {
+  background: #23664a;
+  transform: translateY(-1px);
+}
+.pill {
+  background: #ecf6e4;
+  color: #3f6b45;
+  font-weight: 700;
+}
+textarea,
+input,
+select {
+  border-radius: 14px;
+}
+.mic-button {
+  background: #2d7a55;
+  box-shadow:
+    0 0 0 12px #e6f4dd,
+    0 0 0 24px #f3f9ee,
+    0 10px 24px rgba(45, 122, 85, 0.3);
+}
+.mic-button:hover {
+  background: #23664a;
+  transform: scale(1.05);
+}
+.toast {
+  border-radius: 999px;
+}
+/* Bigger logo in the top bar */
+.sidebar .brand {
+  font-size: 34px;
+  gap: 12px;
+}
+.sidebar .brand-symbol {
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+}
+@media (max-width: 900px) {
+  .sidebar .brand {
+    font-size: 28px;
+  }
+  .sidebar .brand-symbol {
+    width: 44px;
+    height: 44px;
+  }
+}
+/* Sign-in card logo: frog fills its tile, rounded font gets normal spacing */
+.login-brand {
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  gap: 14px;
+}
+.login-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
 }
