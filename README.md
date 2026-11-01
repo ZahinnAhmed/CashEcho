@@ -1,4 +1,4 @@
-ashEcho
+CashEcho
 Voice bookkeeping for small businesses. Say your sales and expenses out loud, ask questions about your own numbers, and see whether your cash will cover your upcoming loan payments.
 Built in 48 hours at Hack Knight 2026 (Queens College, Oct 9–11).
 
